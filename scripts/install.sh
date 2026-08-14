@@ -8,5 +8,5 @@ plugin_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$plugin_root"
 dsh plugin --profile "$profile" add "$plugin_root"
 
-printf "Installed dsh-file-upload-ocr-plugin in profile '%s'.\n" "$profile"
-printf "Start Harness with: dsh --profile %s\n" "$profile"
+printf "已将 dsh-file-upload-ocr-plugin 安装到 profile '%s' / Installed dsh-file-upload-ocr-plugin in profile '%s'.\n" "$profile" "$profile"
+printf "启动 Harness：dsh --profile %s / Start Harness with: dsh --profile %s\n" "$profile" "$profile"

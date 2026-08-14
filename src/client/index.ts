@@ -23,7 +23,7 @@ export function apply(ctx: ClientContext): void {
       clipboardText: (ref) => {
         const file = files.find(ref)
         if (file === undefined) throw new Error(`file-input: missing attachment ${ref}`)
-        return `[文件: ${file.name}]`
+        return `[文件 / File: ${file.name}]`
       },
       serialize: async (ref, signal) => {
         if (signal.aborted) throw signal.reason
@@ -61,7 +61,7 @@ export function apply(ctx: ClientContext): void {
           source: FILE_SOURCE,
           ref: file.ref,
           label: '📄',
-          clipboardText: `[文件: ${file.name}]`,
+          clipboardText: `[文件 / File: ${file.name}]`,
         }
         const accepted = actx.bail(actx, 'slash/input-insert-reference', {
           reference,
@@ -69,7 +69,7 @@ export function apply(ctx: ClientContext): void {
         }) === true
         if (!accepted) {
           files.remove(sessionId, file.ref)
-          throw new Error('当前输入状态不能添加文件。')
+          throw new Error('当前输入状态不能添加文件 / Files cannot be added in the current input state.')
         }
       },
     }),

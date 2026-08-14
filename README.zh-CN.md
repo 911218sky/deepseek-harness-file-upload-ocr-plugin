@@ -2,15 +2,15 @@
 
 [English](./README.md) · 中文
 
-> DeepSeek Harness 文件上传与 OCR 插件：在 Web UI 中以附件卡片上传 PDF、Word、Excel、PowerPoint、图片和文本文件；PDF 与图片在本机使用 RapidOCR 自动识别。
+> DeepSeek Harness 文件上传与 OCR 插件：在 Web UI 中以附件卡片上传 PDF、Word、Excel、PowerPoint、图片和文本文件；PDF 与图片在本机自动 OCR 识别。
 
-**English description:** A file upload and local OCR plugin for DeepSeek Harness. Add PDF, Word, Excel, PowerPoint, image, and text attachments as chat cards; scanned PDFs and images are recognized locally with CPU-friendly RapidOCR.
+**English description:** A file upload and local OCR plugin for DeepSeek Harness. Add PDF, Word, Excel, PowerPoint, image, and text attachments as chat cards; scanned PDFs and images are recognized locally with OCR.
 
 ## 功能
 
 - 输入框上方和发送后的对话记录都使用真正的文件附件卡片。
 - PDF 优先提取原生文本；扫描页或文本过少的页面自动 OCR。
-- RapidOCR + ONNX Runtime 本地 CPU 推理，不需要显卡。
+- PDF 和图片支持本地自动 OCR 识别。
 - 支持 DOCX、XLSX/XLSM、PPTX、图片及常见文本/代码文件。
 - 原文件只在本机解析；模型收到提取文本。
 - 遵循 Harness 的 Cordis 生命周期、依赖注入、Schemastery 配置和 HMR 注册规范。
@@ -40,7 +40,7 @@ chmod +x scripts/*.sh
 dsh --profile web
 ```
 
-首次安装会下载 Python wheel 和轻量 OCR 模型。发布分支包含预构建的 `lib/`，无需授权 pnpm 安装脚本。
+首次安装会下载 Python OCR 依赖。发布分支包含预构建的 `lib/`，无需授权 pnpm 安装脚本。
 
 ### 从 DeepSeek Harness 源码运行
 
@@ -63,7 +63,7 @@ pnpm dsh --profile web
 
 ## 配置
 
-`cordis.patch.yml` 提供适合 CPU 的默认值。Harness patch 会整体替换一行的 `config`，覆盖 `file-upload-ocr` 行时需重述所有键。
+`cordis.patch.yml` 提供 OCR 默认值。Harness patch 会整体替换一行的 `config`，覆盖 `file-upload-ocr` 行时需重述所有键。
 
 | 配置键 | 默认值 | 含义 |
 |---|---:|---|

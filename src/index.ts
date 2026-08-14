@@ -51,7 +51,7 @@ function resolvePython(command: string): string {
     import.meta.url,
   ))
   if (!existsSync(local)) {
-    throw new Error('OCR environment is not installed. Run scripts/setup-ocr.ps1 or scripts/setup-ocr.sh.')
+    throw new Error('OCR 环境未安装 / OCR environment is not installed. 请运行 scripts/setup-ocr.ps1 或 scripts/setup-ocr.sh / Run scripts/setup-ocr.ps1 or scripts/setup-ocr.sh.')
   }
   return local
 }
@@ -93,10 +93,10 @@ async function readFile(req: IncomingMessage, maxBytes: number): Promise<Buffer>
   for await (const chunk of req) {
     const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
     bytes += value.byteLength
-    if (bytes > maxBytes) throw new Error(`File exceeds the configured ${maxBytes}-byte limit.`)
+    if (bytes > maxBytes) throw new Error(`文件超过配置的 ${maxBytes} 字节上限 / File exceeds the configured ${maxBytes}-byte limit.`)
     chunks.push(value)
   }
-  if (bytes === 0) throw new Error('File upload is empty.')
+  if (bytes === 0) throw new Error('文件为空 / File upload is empty.')
   return Buffer.concat(chunks, bytes)
 }
 
@@ -118,20 +118,20 @@ export function apply(ctx: Context, config: Config): void {
     async handler(req, res) {
       try {
         if (req.method !== 'POST') {
-          json(res, 405, { error: 'Only POST is supported.' })
+          json(res, 405, { error: '仅支持 POST / Only POST is supported.' })
           return
         }
         const origin = req.headers.origin
         const host = req.headers.host
         if (origin !== undefined && host !== undefined
           && origin !== `http://${host}` && origin !== `https://${host}`) {
-          json(res, 403, { error: 'Cross-origin file upload is not allowed.' })
+          json(res, 403, { error: '不允许跨域文件上传 / Cross-origin file upload is not allowed.' })
           return
         }
         const encodedFilename = req.headers['x-dsh-file-name']
-        if (typeof encodedFilename !== 'string') throw new Error('Missing x-dsh-file-name header.')
+        if (typeof encodedFilename !== 'string') throw new Error('缺少 x-dsh-file-name 请求头 / Missing x-dsh-file-name header.')
         const filename = decodeURIComponent(encodedFilename)
-        if (filename === '' || basename(filename) !== filename) throw new Error('Invalid file name.')
+        if (filename === '' || basename(filename) !== filename) throw new Error('文件名无效 / Invalid file name.')
         const result = await runExtract(await readFile(req, config.maxFileBytes), filename, config)
         json(res, 200, result)
       } catch (error) {

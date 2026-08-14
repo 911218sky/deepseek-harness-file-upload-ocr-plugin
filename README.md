@@ -2,15 +2,15 @@
 
 [中文说明](./README.zh-CN.md) · English
 
-> A file upload and local OCR plugin for DeepSeek Harness. Add PDF, Word, Excel, PowerPoint, image, and text attachments as chat cards; scanned PDFs and images are recognized locally with CPU-friendly RapidOCR.
+> A file upload and local OCR plugin for DeepSeek Harness. Add PDF, Word, Excel, PowerPoint, image, and text attachments as chat cards; scanned PDFs and images are recognized locally with OCR.
 
-**中文项目描述：** DeepSeek Harness 文件上传与 OCR 插件：在 Web UI 中以附件卡片上传 PDF、Word、Excel、PowerPoint、图片和文本文件；PDF 与图片在本机使用 RapidOCR 自动识别。
+**中文项目描述：** DeepSeek Harness 文件上传与 OCR 插件：在 Web UI 中以附件卡片上传 PDF、Word、Excel、PowerPoint、图片和文本文件；PDF 与图片在本机自动 OCR 识别。
 
 ## Features
 
 - Real attachment cards in the composer and sent conversation messages.
 - PDF native-text extraction with automatic OCR for scanned or low-text pages.
-- CPU-friendly local OCR through RapidOCR and ONNX Runtime; no GPU required.
+- Local OCR for scanned PDFs and images.
 - DOCX, XLSX/XLSM, PPTX, images, and common text/code formats.
 - Local file processing. Only extracted text is included in the model prompt.
 - Cordis lifecycle, dependency injection, Schemastery configuration, and HMR-compatible registration.
@@ -40,7 +40,7 @@ chmod +x scripts/*.sh
 dsh --profile web
 ```
 
-The first install downloads the Python wheels and small OCR models. Release branches include prebuilt `lib/` files, so pnpm build-script authorization is not required.
+The first install downloads the Python OCR dependencies. Release branches include prebuilt `lib/` files, so pnpm build-script authorization is not required.
 
 ### DeepSeek Harness source checkout
 
@@ -63,7 +63,7 @@ After sending, the file card remains attached to the message.
 
 ## Configuration
 
-The bundle provides CPU-oriented defaults in `cordis.patch.yml`. Harness patches replace a row's entire `config`, so repeat all keys when overriding the `file-upload-ocr` row.
+The bundle provides OCR defaults in `cordis.patch.yml`. Harness patches replace a row's entire `config`, so repeat all keys when overriding the `file-upload-ocr` row.
 
 | Key | Default | Meaning |
 |---|---:|---|
