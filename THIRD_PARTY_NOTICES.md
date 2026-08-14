@@ -1,4 +1,4 @@
-# Third-party notices
+# 第三方许可声明 / Third-party notices
 
 This project is MIT-licensed / 本项目采用 MIT 许可证。Installers obtain the projects below from npm or PyPI; they are not copied into this source repository. Each dependency remains governed by its own license. / 安装脚本会从 npm 或 PyPI 获取以下项目；它们没有复制到本仓库中，每个依赖仍受其自身许可证约束。
 
