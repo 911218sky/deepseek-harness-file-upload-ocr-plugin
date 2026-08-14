@@ -59,8 +59,8 @@ export function FileAttachButton({ attach }: FileAttachButtonProps): ReactNode {
           body: file,
         })
         const value = await response.json() as ExtractResponse | { error: string }
-        if (!response.ok) throw new Error('error' in value ? value.error : `文件解析失败（${response.status}）`)
-        if (!('text' in value) || !('kind' in value)) throw new Error('文件解析响应不完整。')
+        if (!response.ok) throw new Error('error' in value ? value.error : `文件解析失败 / File parsing failed（${response.status}）`)
+        if (!('text' in value) || !('kind' in value)) throw new Error('文件解析响应不完整 / File parsing response is incomplete.')
         attach(file, value)
       }
     } catch (reason) {
@@ -77,9 +77,9 @@ export function FileAttachButton({ attach }: FileAttachButtonProps): ReactNode {
         type="button"
         className={css.attachButton}
         disabled={busy}
-        aria-label="添加文件"
+        aria-label="添加文件 / Add file"
         aria-busy={busy}
-        title={error ?? '添加文件'}
+        title={error ?? '添加文件 / Add file'}
         onClick={() => { picker.current?.click() }}
       >
         <FileIcon size={16} />
@@ -116,7 +116,7 @@ export function FileAttachmentRail({ sessionId, input, files, remove }: FileAtta
 
   if (active.length === 0) return null
   return (
-    <div className={css.rail} aria-label="已添加的文件">
+    <div className={css.rail} aria-label="已添加的文件 / Added files">
       {active.map((file: ExtractedFile) => (
         <div key={file.ref} className={css.card}>
           <span className={css.fileIcon}><FileIcon size={16} /></span>
@@ -124,7 +124,7 @@ export function FileAttachmentRail({ sessionId, input, files, remove }: FileAtta
             <span className={css.name} title={file.name}>{file.name}</span>
             <span className={css.size}>{fileSize(file.size)}</span>
           </span>
-          <button type="button" className={css.remove} aria-label={`移除 ${file.name}`} onClick={() => { remove(file.ref) }}>
+          <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.ref) }}>
             <IconCloseOutline16 size={14} />
           </button>
         </div>

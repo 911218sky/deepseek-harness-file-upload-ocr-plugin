@@ -11,5 +11,5 @@ try {
   Pop-Location
 }
 
-Write-Output "Installed dsh-file-upload-ocr-plugin in profile '$Profile'."
-Write-Output "Start Harness with: dsh --profile $Profile"
+Write-Output "已将 dsh-file-upload-ocr-plugin 安装到 profile '$Profile' / Installed dsh-file-upload-ocr-plugin in profile '$Profile'."
+Write-Output "启动 Harness：dsh --profile $Profile / Start Harness with: dsh --profile $Profile"

@@ -60,7 +60,7 @@ function CopyButton({ text }: { text: string }): ReactNode {
         })
       }}
     >
-      {copied ? '已复制' : '复制'}
+      {copied ? '已复制 / Copied' : '复制 / Copy'}
     </button>
   )
 }
@@ -78,7 +78,7 @@ function SentFileMessage({ content, loadImage }: {
     else rest.push(block)
   }
   const projected = project(texts.join(''))
-  const copyText = [projected.text, ...projected.files.map(file => `[文件: ${file.name}]`)].filter(Boolean).join('\n')
+  const copyText = [projected.text, ...projected.files.map(file => `[文件 / File: ${file.name}]`)].filter(Boolean).join('\n')
   return (
     <div className={css.row}>
       <div className={css.stack}>
@@ -87,8 +87,8 @@ function SentFileMessage({ content, loadImage }: {
           load={loadImage}
           align="end"
           labels={{
-            image: '图片', open: '查看原图', openNamed: name => `查看 ${name}`, loading: '加载中', loadFailed: '加载失败，点击重试',
-            lightbox: { dialog: '图片预览', close: '关闭' },
+            image: '图片 / Image', open: '查看原图 / View original', openNamed: name => `查看 / View ${name}`, loading: '加载中 / Loading', loadFailed: '加载失败，点击重试 / Failed to load; click to retry',
+            lightbox: { dialog: '图片预览 / Image preview', close: '关闭 / Close' },
           }}
         />
         {projected.files.length > 0 && (

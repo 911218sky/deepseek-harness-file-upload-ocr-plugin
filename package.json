@@ -1,8 +1,8 @@
 {
   "name": "dsh-file-upload-ocr-plugin",
   "version": "1.0.0",
-  "description": "File upload and CPU-friendly local OCR plugin for DeepSeek Harness: PDF, Word, Excel, PowerPoint, images, and text attachments.",
-  "keywords": ["deepseek-harness", "deepseek", "harness-plugin", "file-upload", "pdf-ocr", "rapidocr", "document-attachment", "word", "excel"],
+  "description": "File upload and local OCR plugin for DeepSeek Harness: PDF, Word, Excel, PowerPoint, images, and text attachments.",
+  "keywords": ["deepseek-harness", "deepseek", "harness-plugin", "file-upload", "pdf-ocr", "ocr", "document-attachment", "word", "excel"],
   "author": "BYYY-eng",
   "repository": {
     "type": "git",
