@@ -2,7 +2,7 @@
 
 [English](./README.md) · 中文
 
-> DeepSeek Harness 文件上传与 OCR 插件：在 Web UI 中以附件卡片上传 PDF、Word、Excel、PowerPoint、图片和文本文件；PDF 与图片在本机使用适合 CPU 的 RapidOCR 自动识别，文件全文不会铺满聊天气泡。
+> DeepSeek Harness 文件上传与 OCR 插件：在 Web UI 中以附件卡片上传 PDF、Word、Excel、PowerPoint、图片和文本文件；PDF 与图片在本机使用 RapidOCR 自动识别。
 
 **English description:** A file upload and local OCR plugin for DeepSeek Harness. Add PDF, Word, Excel, PowerPoint, image, and text attachments as chat cards; scanned PDFs and images are recognized locally with CPU-friendly RapidOCR.
 
@@ -12,7 +12,7 @@
 - PDF 优先提取原生文本；扫描页或文本过少的页面自动 OCR。
 - RapidOCR + ONNX Runtime 本地 CPU 推理，不需要显卡。
 - 支持 DOCX、XLSX/XLSM、PPTX、图片及常见文本/代码文件。
-- 原文件只在本机解析；模型收到提取文本，不会在聊天气泡中显示全文。
+- 原文件只在本机解析；模型收到提取文本。
 - 遵循 Harness 的 Cordis 生命周期、依赖注入、Schemastery 配置和 HMR 注册规范。
 
 支持扩展名：PDF；PNG/JPEG/WebP/BMP/TIFF；DOCX；XLSX/XLSM；PPTX；TXT、Markdown、CSV、TSV、JSON、XML、YAML、HTML、日志和常见源码文件。旧 DOC/XLS 请先另存为 DOCX/XLSX。
@@ -59,7 +59,7 @@ pnpm dsh --profile web
 2. 选择一个或多个文件，等待附件卡片出现。
 3. 输入问题并正常发送。
 
-发送后只显示文件卡片与用户输入的问题。OCR/解析正文仍会交给模型，但不会展开在聊天气泡中；成功时不显示页数或 OCR 统计，只在失败时显示错误。
+发送后，文件卡片会随消息保留。
 
 ## 配置
 

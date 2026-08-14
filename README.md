@@ -4,7 +4,7 @@
 
 > A file upload and local OCR plugin for DeepSeek Harness. Add PDF, Word, Excel, PowerPoint, image, and text attachments as chat cards; scanned PDFs and images are recognized locally with CPU-friendly RapidOCR.
 
-**中文项目描述：** DeepSeek Harness 文件上传与 OCR 插件：在 Web UI 中以附件卡片上传 PDF、Word、Excel、PowerPoint、图片和文本文件；PDF 与图片在本机使用适合 CPU 的 RapidOCR 自动识别，文件全文不会铺满聊天气泡。
+**中文项目描述：** DeepSeek Harness 文件上传与 OCR 插件：在 Web UI 中以附件卡片上传 PDF、Word、Excel、PowerPoint、图片和文本文件；PDF 与图片在本机使用 RapidOCR 自动识别。
 
 ## Features
 
@@ -59,7 +59,7 @@ pnpm dsh --profile web
 2. Select one or more files and wait for their cards to appear.
 3. Type a question and send it normally.
 
-The sent message keeps compact file cards. Extracted content remains available to the model but is not rendered as a wall of text. The plugin shows errors only; it does not add OCR page-count notices.
+After sending, the file card remains attached to the message.
 
 ## Configuration
 
