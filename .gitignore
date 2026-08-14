@@ -1,0 +1,7 @@
+node_modules/
+.venv/
+*.tgz
+__pycache__/
+*.py[cod]
+*.tsbuildinfo
+.DS_Store

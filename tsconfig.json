@@ -1,0 +1,20 @@
+{
+  "extends": "../tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "noEmit": true,
+    "types": ["node", "react"]
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../vendor/cordis" },
+    { "path": "../vendor/schemastery" },
+    { "path": "../packages/host/webserver" },
+    { "path": "../packages/client/runtime" },
+    { "path": "../packages/client/ui-slots" },
+    { "path": "../packages/client/ui-conversation" },
+    { "path": "../packages/client/ui-input-trigger" },
+    { "path": "../packages/client/ui-primitives" }
+  ]
+}
