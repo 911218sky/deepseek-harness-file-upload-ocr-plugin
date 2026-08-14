@@ -1,0 +1,72 @@
+{
+  "name": "dsh-file-upload-ocr-plugin",
+  "version": "1.0.0",
+  "description": "File upload and CPU-friendly local OCR plugin for DeepSeek Harness: PDF, Word, Excel, PowerPoint, images, and text attachments.",
+  "keywords": ["deepseek-harness", "deepseek", "harness-plugin", "file-upload", "pdf-ocr", "rapidocr", "document-attachment", "word", "excel"],
+  "author": "BYYY-eng",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BYYY-eng/deepseek-harness-file-upload-ocr-plugin.git"
+  },
+  "homepage": "https://github.com/BYYY-eng/deepseek-harness-file-upload-ocr-plugin#readme",
+  "bugs": "https://github.com/BYYY-eng/deepseek-harness-file-upload-ocr-plugin/issues",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/client.js.map",
+    "extract.py",
+    "requirements.txt",
+    "scripts",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "build": "tsdown"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-attachment",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-input-trigger"
+      ],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-attachment": "0.1.0-rc.5",
+    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.5",
+    "@deepseek-ai/dsh-client-ui-attachment": "0.1.0-rc.5",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.1.0-rc.5",
+    "@deepseek-ai/dsh-client-ui-input-trigger": "0.1.0-rc.5",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.5",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.0-rc.5",
+    "@deepseek-ai/dsh-host-webserver": "0.1.0-rc.5",
+    "react": "^18.2.0"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "@types/react": "~18.3.1",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3"
+  }
+}

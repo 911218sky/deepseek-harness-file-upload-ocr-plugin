@@ -1,0 +1,104 @@
+.hidden {
+  display: none;
+}
+
+.buttonRoot {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.attachButton,
+.remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  color: var(--dsw-alias-label-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.attachButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.attachButton:hover:not(:disabled),
+.remove:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.attachButton:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.error {
+  overflow: hidden;
+  max-width: 220px;
+  margin-left: 6px;
+  color: var(--dsw-static-red-600);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: min(100%, var(--dsh-composer-card-max-width));
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(260px, 100%);
+  padding: 8px 8px 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.fileIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  color: var(--dsw-static-deepseek-500);
+  background: var(--dsw-static-deepseek-50);
+}
+
+.details {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.size {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.remove {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
