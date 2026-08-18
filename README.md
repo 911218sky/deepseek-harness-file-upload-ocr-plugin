@@ -9,6 +9,8 @@
 ## Features
 
 - Real attachment cards in the composer and sent conversation messages.
+- Drag files anywhere over the Harness window to upload them.
+- File cards use different accent colors for PDF, images, Word, Excel, PowerPoint, and text files.
 - PDF native-text extraction with automatic OCR for scanned or low-text pages.
 - Local OCR for scanned PDFs and images.
 - DOCX, XLSX/XLSM, PPTX, images, and common text/code formats.
@@ -56,7 +58,7 @@ pnpm dsh --profile web
 ## Usage
 
 1. Click the document icon in the lower-left corner of the composer.
-2. Select one or more files and wait for their cards to appear.
+2. Select one or more files and wait for their cards to appear, or drag files anywhere over the Harness window.
 3. Type a question and send it normally.
 
 After sending, the file card remains attached to the message.
@@ -68,7 +70,7 @@ The bundle provides OCR defaults in `cordis.patch.yml`. Harness patches replace 
 | Key | Default | Meaning |
 |---|---:|---|
 | `pythonCommand` | `auto` | Uses `.venv` created by setup; may be an explicit Python path |
-| `maxFileBytes` | 25 MiB | Maximum uploaded file size |
+| `maxFileBytes` | 25 MiB (26,214,400 bytes) | Maximum size of each uploaded file |
 | `maxPages` | 50 | PDF pages, workbook sheets, or slides |
 | `dpi` | 144 | Scanned-PDF render resolution |
 | `nativeTextMinChars` | 24 | Native PDF characters required to skip OCR |

@@ -60,7 +60,7 @@ export function apply(ctx: ClientContext): void {
         const reference: ReferenceInsert = {
           source: FILE_SOURCE,
           ref: file.ref,
-          label: '📄',
+          label: file.name,
           clipboardText: `[文件 / File: ${file.name}]`,
         }
         const accepted = actx.bail(actx, 'slash/input-insert-reference', {
