@@ -9,6 +9,8 @@
 ## 功能
 
 - 输入框上方和发送后的对话记录都使用真正的文件附件卡片。
+- 支持将文件拖到 Harness 窗口任意位置上传。
+- PDF、图片、Word、Excel、PowerPoint 和文本文件使用不同的卡片强调色。
 - PDF 优先提取原生文本；扫描页或文本过少的页面自动 OCR。
 - PDF 和图片支持本地自动 OCR 识别。
 - 支持 DOCX、XLSX/XLSM、PPTX、图片及常见文本/代码文件。
@@ -56,7 +58,7 @@ pnpm dsh --profile web
 ## 使用方法
 
 1. 点击输入框左下角的文件图标。
-2. 选择一个或多个文件，等待附件卡片出现。
+2. 选择一个或多个文件并等待附件卡片出现，也可以将文件拖到 Harness 窗口任意位置。
 3. 输入问题并正常发送。
 
 发送后，文件卡片会随消息保留。
@@ -68,7 +70,7 @@ pnpm dsh --profile web
 | 配置键 | 默认值 | 含义 |
 |---|---:|---|
 | `pythonCommand` | `auto` | 自动使用安装脚本创建的 `.venv`，也可填 Python 绝对路径 |
-| `maxFileBytes` | 25 MiB | 单个文件大小上限 |
+| `maxFileBytes` | 25 MiB（26,214,400 字节） | 每个文件的大小上限 |
 | `maxPages` | 50 | PDF 页数、工作表数或幻灯片数上限 |
 | `dpi` | 144 | 扫描 PDF 的渲染分辨率 |
 | `nativeTextMinChars` | 24 | PDF 原生字符达到此值时跳过 OCR |

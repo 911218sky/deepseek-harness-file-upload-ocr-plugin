@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import type { ChangeEvent, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { DropOverlay } from '@deepseek-ai/dsh-client-ui-attachment'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ExtractedFile, FileAttachmentStore } from './FileAttachmentStore.ts'
 import css from './FileAttachments.module.css'
@@ -26,6 +27,19 @@ export interface FileAttachmentRailInjected {
 export type FileAttachButtonProps = PropsRuntime<'conversation.input.left'> & FileAttachButtonInjected
 export type FileAttachmentRailProps = PropsRuntime<'conversation.input.dock'> & FileAttachmentRailInjected
 
+export function fileKindClass(kind: string): 'pdf' | 'image' | 'word' | 'excel' | 'powerpoint' | 'text' | 'generic' {
+  switch (kind.toLowerCase()) {
+    case 'pdf': return 'pdf'
+    case 'image': return 'image'
+    case 'word': return 'word'
+    case 'excel': return 'excel'
+    case 'powerpoint': return 'powerpoint'
+    case 'text':
+    case 'html': return 'text'
+    default: return 'generic'
+  }
+}
+
 /** Neutral document glyph shared by composer and sent attachment cards. */
 export function FileIcon({ size = 16 }: { size?: number }): ReactNode {
   return (
@@ -39,13 +53,15 @@ export function FileIcon({ size = 16 }: { size?: number }): ReactNode {
 /** Add common local files through the generic extraction endpoint. */
 export function FileAttachButton({ attach }: FileAttachButtonProps): ReactNode {
   const picker = useRef<HTMLInputElement | null>(null)
+  const dragDepth = useRef(0)
+  const busyRef = useRef(false)
   const [busy, setBusy] = useState(false)
+  const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const upload = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
-    const selected = [...(event.target.files ?? [])]
-    event.target.value = ''
+  const upload = async (selected: File[]): Promise<void> => {
     if (selected.length === 0) return
+    busyRef.current = true
     setBusy(true)
     setError(null)
     try {
@@ -66,13 +82,68 @@ export function FileAttachButton({ attach }: FileAttachButtonProps): ReactNode {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
+      busyRef.current = false
       setBusy(false)
     }
   }
 
+  useEffect(() => {
+    const hasFiles = (event: globalThis.DragEvent): boolean => event.dataTransfer?.types.includes('Files') ?? false
+    const reset = (): void => {
+      dragDepth.current = 0
+      setDragActive(false)
+    }
+    const onDragEnter = (event: globalThis.DragEvent): void => {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      dragDepth.current += 1
+      setDragActive(true)
+    }
+    const onDragOver = (event: globalThis.DragEvent): void => {
+      if (!hasFiles(event) || event.dataTransfer === null) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      event.dataTransfer.dropEffect = busyRef.current ? 'none' : 'copy'
+    }
+    const onDragLeave = (event: globalThis.DragEvent): void => {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      dragDepth.current = Math.max(0, dragDepth.current - 1)
+      if (dragDepth.current === 0) setDragActive(false)
+      const leavingViewport = event.clientX <= 0 || event.clientY <= 0
+        || event.clientX >= window.innerWidth || event.clientY >= window.innerHeight
+      if ((event.target === document.documentElement || event.target === document.body) && leavingViewport) reset()
+    }
+    const onDrop = (event: globalThis.DragEvent): void => {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      reset()
+      if (!busyRef.current) void upload([...(event.dataTransfer?.files ?? [])])
+    }
+    document.addEventListener('dragenter', onDragEnter, true)
+    document.addEventListener('dragover', onDragOver, true)
+    document.addEventListener('dragleave', onDragLeave, true)
+    document.addEventListener('drop', onDrop, true)
+    window.addEventListener('dragend', reset)
+    return () => {
+      document.removeEventListener('dragenter', onDragEnter, true)
+      document.removeEventListener('dragover', onDragOver, true)
+      document.removeEventListener('dragleave', onDragLeave, true)
+      document.removeEventListener('drop', onDrop, true)
+      window.removeEventListener('dragend', reset)
+    }
+  }, [attach])
+
   return (
     <span className={css.buttonRoot}>
-      <input ref={picker} className={css.hidden} type="file" accept={ACCEPT} multiple onChange={(event) => { void upload(event) }} />
+      <input ref={picker} className={css.hidden} type="file" accept={ACCEPT} multiple onChange={(event) => {
+        const selected = [...(event.target.files ?? [])]
+        event.target.value = ''
+        void upload(selected)
+      }} />
       <button
         type="button"
         className={css.attachButton}
@@ -85,6 +156,15 @@ export function FileAttachButton({ attach }: FileAttachButtonProps): ReactNode {
         <FileIcon size={16} />
       </button>
       {error !== null && <span className={css.error} role="alert">{error}</span>}
+      {dragActive && (
+        <DropOverlay
+          disabled={busy}
+          labels={{
+            title: busy ? '正在添加文件 / Adding files' : '拖放文件以上传 / Drop files to upload',
+            desc: busy ? undefined : '支持 PDF、图片、Word、Excel、PPT 和文本文件 / PDF, images, Word, Excel, PPT, and text files',
+          }}
+        />
+      )}
     </span>
   )
 }
@@ -119,7 +199,7 @@ export function FileAttachmentRail({ sessionId, input, files, remove }: FileAtta
     <div className={css.rail} aria-label="已添加的文件 / Added files">
       {active.map((file: ExtractedFile) => (
         <div key={file.ref} className={css.card}>
-          <span className={css.fileIcon}><FileIcon size={16} /></span>
+          <span className={`${css.fileIcon} ${css[fileKindClass(file.kind)]}`}><FileIcon size={16} /></span>
           <span className={css.details}>
             <span className={css.name} title={file.name}>{file.name}</span>
             <span className={css.size}>{fileSize(file.size)}</span>

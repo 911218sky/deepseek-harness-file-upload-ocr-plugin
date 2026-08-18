@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { ImageGallery } from '@deepseek-ai/dsh-client-ui-attachment'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { FileIcon } from './FileAttachments.tsx'
+import { FileIcon, fileKindClass } from './FileAttachments.tsx'
 import css from './SentFileMessage.module.css'
 
 interface SentAttachment {
@@ -95,7 +95,7 @@ function SentFileMessage({ content, loadImage }: {
           <div className={css.files}>
             {projected.files.map((file, index) => (
               <div className={css.card} key={`${file.name}:${index}`}>
-                <span className={css.icon}><FileIcon size={18} /></span>
+                <span className={`${css.icon} ${css[fileKindClass(file.kind)]}`}><FileIcon size={18} /></span>
                 <span className={css.details}>
                   <span className={css.name} title={file.name}>{file.name}</span>
                   <span className={css.meta}>{[file.kind.toUpperCase(), fileSize(file.size)].filter(Boolean).join(' · ')}</span>
