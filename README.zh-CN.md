@@ -21,7 +21,9 @@
 
 ## 一键安装
 
-前提：已能使用 `dsh` CLI、Python 3.9+、Git，并已有 DeepSeek Harness Web profile。
+前提：已能使用 `dsh` CLI、Python 3.9+ 和 Git。如果 `web` profile 不存在，安装脚本会自动创建。
+
+安装脚本会先创建本地 Python 环境，再通过 Harness 官方的 `dsh plugin --profile ... add` 流程注册插件，无需手动修改 `cordis.yml` 或 `cordis.patch.yml`。
 
 ### Windows PowerShell
 
@@ -43,6 +45,20 @@ dsh --profile web
 ```
 
 首次安装会下载 Python OCR 依赖。发布分支包含预构建的 `lib/`，无需授权 pnpm 安装脚本。
+
+### GitHub Release 压缩包
+
+如果不想克隆仓库而是下载 GitHub Release 压缩包，请先将其解压到一个文件夹，在该文件夹中打开终端，然后运行上面的对应平台安装脚本。这样 OCR 环境会和已安装的插件放在同一目录。除非你已经在安装后的插件目录中运行 `scripts/setup-ocr.ps1` 或 `scripts/setup-ocr.sh`，否则不要只执行 `dsh plugin add` 安装 `.tgz` 文件。
+
+### Harness 官方手动安装方式
+
+熟悉 Harness 的用户可以在运行 OCR 环境安装脚本后，直接使用官方 bundle 命令：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-ocr.ps1
+dsh plugin --profile web add C:\path\to\deepseek-harness-file-upload-ocr-plugin
+dsh --profile web
+```
 
 ### 从 DeepSeek Harness 源码运行
 
@@ -78,6 +94,8 @@ pnpm dsh --profile web
 | `maxOutputChars` | 200000 | 交给模型的最大字符数 |
 
 启动前设置 `DSH_FILE_OCR_PYTHON`，可在不改 YAML 的情况下指定 Python 环境。
+
+如果 Harness 提示“未安装 OCR 环境”，请在插件目录中重新运行对应平台的环境安装脚本，然后重启 `web` profile。
 
 ## 隐私、安全与开源协议
 
