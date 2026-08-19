@@ -50,6 +50,8 @@ The first install downloads the Python OCR dependencies. Release branches includ
 
 If you download a GitHub Release archive instead of cloning the repository, extract it into a folder first, open a terminal in that folder, and run the same platform installer above. This keeps the OCR environment beside the installed bundle. Do not install the `.tgz` with `dsh plugin add` alone unless you have also run `scripts/setup-ocr.ps1` or `scripts/setup-ocr.sh` for that installed package.
 
+For the simplest Windows path, choose **Source code (zip)** on the Release page, extract it, and run `scripts\install.ps1`.
+
 ### Official manual bundle install
 
 Advanced users can use the Harness bundle command directly after running the OCR setup script:
