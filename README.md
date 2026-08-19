@@ -21,7 +21,9 @@ Supported extensions: PDF; PNG, JPEG, WebP, BMP, TIFF; DOCX; XLSX/XLSM; PPTX; TX
 
 ## One-click install
 
-Prerequisites: a working `dsh` CLI, Python 3.9+, Git, and a DeepSeek Harness Web profile.
+Prerequisites: a working `dsh` CLI, Python 3.9+, and Git. The installer creates the `web` profile when it does not exist.
+
+The installer creates the local Python environment first, then registers this package through Harness's official `dsh plugin --profile ... add` flow. No manual `cordis.yml` or `cordis.patch.yml` edits are needed.
 
 ### Windows PowerShell
 
@@ -43,6 +45,20 @@ dsh --profile web
 ```
 
 The first install downloads the Python OCR dependencies. Release branches include prebuilt `lib/` files, so pnpm build-script authorization is not required.
+
+### GitHub Release archive
+
+If you download a GitHub Release archive instead of cloning the repository, extract it into a folder first, open a terminal in that folder, and run the same platform installer above. This keeps the OCR environment beside the installed bundle. Do not install the `.tgz` with `dsh plugin add` alone unless you have also run `scripts/setup-ocr.ps1` or `scripts/setup-ocr.sh` for that installed package.
+
+### Official manual bundle install
+
+Advanced users can use the Harness bundle command directly after running the OCR setup script:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-ocr.ps1
+dsh plugin --profile web add C:\path\to\deepseek-harness-file-upload-ocr-plugin
+dsh --profile web
+```
 
 ### DeepSeek Harness source checkout
 
@@ -78,6 +94,8 @@ The bundle provides OCR defaults in `cordis.patch.yml`. Harness patches replace 
 | `maxOutputChars` | 200000 | Maximum extracted characters sent to the model |
 
 Set `DSH_FILE_OCR_PYTHON` before startup to override the configured Python runtime without editing YAML.
+
+If Harness reports that the OCR environment is not installed, run the platform setup script again from the plugin folder and restart the `web` profile.
 
 ## Privacy and security
 
