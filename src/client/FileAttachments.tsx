@@ -17,6 +17,7 @@ interface ExtractResponse {
 
 export interface FileAttachButtonInjected {
   attach(file: File, result: ExtractResponse): void
+  attachImage?(file: File): Promise<void>
 }
 
 export interface FileAttachmentRailInjected {
@@ -51,7 +52,7 @@ export function FileIcon({ size = 16 }: { size?: number }): ReactNode {
 }
 
 /** Add common local files through the generic extraction endpoint. */
-export function FileAttachButton({ attach }: FileAttachButtonProps): ReactNode {
+export function FileAttachButton({ attach, attachImage }: FileAttachButtonProps): ReactNode {
   const picker = useRef<HTMLInputElement | null>(null)
   const dragDepth = useRef(0)
   const busyRef = useRef(false)
@@ -66,6 +67,13 @@ export function FileAttachButton({ attach }: FileAttachButtonProps): ReactNode {
     setError(null)
     try {
       for (const file of selected) {
+        if (file.type.startsWith("image/") && attachImage !== undefined) {
+          const direct = window.confirm("圖片要直接提供給支援視覺的模型嗎？\n\n按「確定」：直接提供原圖\n按「取消」：使用本機 OCR")
+          if (direct) {
+            await attachImage(file)
+            continue
+          }
+        }
         const response = await fetch(ENDPOINT, {
           method: 'POST',
           headers: {

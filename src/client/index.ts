@@ -72,6 +72,16 @@ export function apply(ctx: ClientContext): void {
           throw new Error('当前输入状态不能添加文件 / Files cannot be added in the current input state.')
         }
       },
+      attachImage: async (browserFile: File) => {
+        const { input } = scopedInput(sessionId)
+        const images = ctx.conversation.createDraftImages([browserFile])
+        if (images.length === 0) throw new Error("无法读取图片 / Unable to read image.")
+        const accepted = input.addImages(images.map(image => image.id))
+        if (!accepted) {
+          ctx.conversation.releaseDraftImages(images)
+          throw new Error("当前输入状态不能添加图片 / Images cannot be added in the current input state.")
+        }
+      },
     }),
   }, FileAttachButton))
 
