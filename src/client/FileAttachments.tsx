@@ -66,13 +66,13 @@ export function FileAttachButton({ attach, attachImage }: FileAttachButtonProps)
     setBusy(true)
     setError(null)
     try {
+      const directImages = attachImage !== undefined
+        && selected.some(file => file.type.startsWith('image/'))
+        && window.confirm('選取的圖片要直接提供給支援視覺的模型嗎？\n\n按「確定」：所有圖片直接提供原圖\n按「取消」：所有圖片使用本機 OCR')
       for (const file of selected) {
-        if (file.type.startsWith("image/") && attachImage !== undefined) {
-          const direct = window.confirm("圖片要直接提供給支援視覺的模型嗎？\n\n按「確定」：直接提供原圖\n按「取消」：使用本機 OCR")
-          if (direct) {
-            await attachImage(file)
-            continue
-          }
+        if (file.type.startsWith('image/') && directImages) {
+          await attachImage(file)
+          continue
         }
         const response = await fetch(ENDPOINT, {
           method: 'POST',
