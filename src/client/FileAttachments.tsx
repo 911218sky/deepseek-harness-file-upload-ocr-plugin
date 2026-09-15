@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
-import { IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconCloseOutline16, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { DropOverlay } from '@deepseek-ai/dsh-client-ui-attachment'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ExtractedFile, FileAttachmentStore } from './FileAttachmentStore.ts'
@@ -51,6 +51,8 @@ export function FileIcon({ size = 16 }: { size?: number }): ReactNode {
   )
 }
 
+type ImageHandleMode = 'vision' | 'ocr'
+
 /** Add common local files through the generic extraction endpoint. */
 export function FileAttachButton({ attach, attachImage }: FileAttachButtonProps): ReactNode {
   const picker = useRef<HTMLInputElement | null>(null)
@@ -59,18 +61,17 @@ export function FileAttachButton({ attach, attachImage }: FileAttachButtonProps)
   const [busy, setBusy] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null)
 
-  const upload = async (selected: File[]): Promise<void> => {
+  const processFiles = async (selected: File[], imageMode: ImageHandleMode | null): Promise<void> => {
     if (selected.length === 0) return
     busyRef.current = true
     setBusy(true)
     setError(null)
     try {
-      const directImages = attachImage !== undefined
-        && selected.some(file => file.type.startsWith('image/'))
-        && window.confirm('選取的圖片要直接提供給支援視覺的模型嗎？\n\n按「確定」：所有圖片直接提供原圖\n按「取消」：所有圖片使用本機 OCR')
+      const useVision = imageMode === 'vision' && attachImage !== undefined
       for (const file of selected) {
-        if (file.type.startsWith('image/') && directImages) {
+        if (file.type.startsWith('image/') && useVision) {
           await attachImage(file)
           continue
         }
@@ -93,6 +94,27 @@ export function FileAttachButton({ attach, attachImage }: FileAttachButtonProps)
       busyRef.current = false
       setBusy(false)
     }
+  }
+
+  const upload = (selected: File[]): void => {
+    if (selected.length === 0 || busyRef.current) return
+    const needsChoice = attachImage !== undefined && selected.some(file => file.type.startsWith('image/'))
+    if (needsChoice) {
+      setPendingFiles(selected)
+      return
+    }
+    void processFiles(selected, null)
+  }
+
+  const chooseImageMode = (mode: ImageHandleMode): void => {
+    const selected = pendingFiles
+    setPendingFiles(null)
+    if (selected === null) return
+    void processFiles(selected, mode)
+  }
+
+  const cancelImageChoice = (): void => {
+    setPendingFiles(null)
   }
 
   useEffect(() => {
@@ -129,7 +151,7 @@ export function FileAttachButton({ attach, attachImage }: FileAttachButtonProps)
       event.preventDefault()
       event.stopImmediatePropagation()
       reset()
-      if (!busyRef.current) void upload([...(event.dataTransfer?.files ?? [])])
+      if (!busyRef.current && pendingFiles === null) upload([...(event.dataTransfer?.files ?? [])])
     }
     document.addEventListener('dragenter', onDragEnter, true)
     document.addEventListener('dragover', onDragOver, true)
@@ -143,19 +165,21 @@ export function FileAttachButton({ attach, attachImage }: FileAttachButtonProps)
       document.removeEventListener('drop', onDrop, true)
       window.removeEventListener('dragend', reset)
     }
-  }, [attach])
+  }, [attach, attachImage, pendingFiles])
+
+  const pendingImageCount = pendingFiles?.filter(file => file.type.startsWith('image/')).length ?? 0
 
   return (
     <span className={css.buttonRoot}>
       <input ref={picker} className={css.hidden} type="file" accept={ACCEPT} multiple onChange={(event) => {
         const selected = [...(event.target.files ?? [])]
         event.target.value = ''
-        void upload(selected)
+        upload(selected)
       }} />
       <button
         type="button"
         className={css.attachButton}
-        disabled={busy}
+        disabled={busy || pendingFiles !== null}
         aria-label="添加文件 / Add file"
         aria-busy={busy}
         title={error ?? '添加文件 / Add file'}
@@ -173,6 +197,55 @@ export function FileAttachButton({ attach, attachImage }: FileAttachButtonProps)
           }}
         />
       )}
+      <Modal
+        open={pendingFiles !== null}
+        onClose={cancelImageChoice}
+        title="選擇圖片處理方式"
+        closeLabel="關閉 / Close"
+        description={`已選取 ${pendingImageCount} 張圖片。請手動選擇一種方式，不會自動套用。`}
+        footer={(
+          <Button variant="outline" onClick={cancelImageChoice}>
+            取消
+          </Button>
+        )}
+      >
+        <div className={css.choiceList} role="listbox" aria-label="圖片處理方式">
+          <button
+            type="button"
+            role="option"
+            className={css.choiceCard}
+            onClick={() => { chooseImageMode('vision') }}
+          >
+            <span className={`${css.choiceIcon} ${css.choiceIconVision}`} aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                <path d="M2.5 8s2.2-3.5 5.5-3.5S13.5 8 13.5 8s-2.2 3.5-5.5 3.5S2.5 8 2.5 8Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                <circle cx="8" cy="8" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+              </svg>
+            </span>
+            <span className={css.choiceCopy}>
+              <span className={css.choiceLabel}>直接提供原圖</span>
+              <span className={css.choiceHint}>交給支援視覺的模型看圖</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            role="option"
+            className={css.choiceCard}
+            onClick={() => { chooseImageMode('ocr') }}
+          >
+            <span className={`${css.choiceIcon} ${css.choiceIconOcr}`} aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                <path d="M3.5 2.5h6l3 3v8h-9v-11Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                <path d="M9.5 2.6v3h3M5.5 8.5h5M5.5 11h3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <span className={css.choiceCopy}>
+              <span className={css.choiceLabel}>本機 OCR 轉文字</span>
+              <span className={css.choiceHint}>在本機辨識後以文字附件送出</span>
+            </span>
+          </button>
+        </div>
+      </Modal>
     </span>
   )
 }
