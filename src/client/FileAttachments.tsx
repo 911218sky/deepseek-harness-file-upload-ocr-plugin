@@ -30,15 +30,16 @@ export interface FileAttachmentRailInjected {
   files: FileAttachmentStore
   remove(ref: string): void
   /**
-   * session-maybe slots do not put sessionId on PropsRuntime; inject must
-   * forward the id from InjectParams so the rail can read the store.
+   * Must not be named `sessionId`: session-maybe kit/owner merges can overwrite
+   * that key with `undefined`. Inject under this alias instead.
    */
-  sessionId: SessionId | undefined
+  ocrSessionId: SessionId | undefined
 }
 
 export type FileAttachButtonProps = PropsRuntime<'conversation.input.left'> & FileAttachButtonInjected
 export type FileAttachmentRailProps = Pick<PropsRuntime<'conversation.input.attachments'>, 'useInput'> & FileAttachmentRailInjected
 export type OcrComposerAttachmentsProps = ComposerAttachmentsProps & FileAttachmentRailInjected
+export type FileAttachmentDockProps = PropsRuntime<'conversation.input.dock'> & FileAttachmentRailInjected
 
 export function fileKindClass(kind: string): 'pdf' | 'image' | 'word' | 'excel' | 'powerpoint' | 'text' | 'generic' {
   switch (kind.toLowerCase()) {
@@ -291,77 +292,137 @@ function Spinner(): ReactNode {
   return <span className={css.spinner} aria-hidden="true" />
 }
 
-/** OCR/file cards styled like native FileCard, rendered inside the composer. */
-export function FileAttachmentRail({ sessionId, useInput, files, remove }: FileAttachmentRailProps): ReactNode {
+function useResolvedSessionId(ocrSessionId: SessionId | undefined, files: FileAttachmentStore): SessionId | undefined {
+  const active = useSyncExternalStore(
+    listener => files.subscribeGlobal(listener),
+    () => files.getActiveSessionId(),
+  )
+  return ocrSessionId ?? active
+}
+
+function truncateError(message: string): string {
+  const first = message.split('\n')[0] ?? message
+  return first.length > 80 ? `${first.slice(0, 77)}…` : first
+}
+
+function AttachmentCards({
+  ocrSessionId,
+  useInput,
+  files,
+  remove,
+  layout,
+}: FileAttachmentRailInjected & {
+  useInput: FileAttachmentRailProps['useInput']
+  layout: 'composer' | 'dock'
+}): ReactNode {
+  const session = useResolvedSessionId(ocrSessionId, files)
   const occurrences = useInput(state => state?.occurrences ?? [])
   const phase = useInput(state => state?.phase)
-  const ready = useSyncExternalStore(
-    listener => (sessionId === undefined ? () => {} : files.subscribe(sessionId, listener)),
-    () => (sessionId === undefined ? EMPTY_FILES : files.get(sessionId)),
+  const generation = useSyncExternalStore(
+    listener => files.subscribeGlobal(listener),
+    () => files.getGeneration(),
   )
-  const pending = useSyncExternalStore(
-    listener => (sessionId === undefined ? () => {} : files.subscribe(sessionId, listener)),
-    () => (sessionId === undefined ? EMPTY_PENDING : files.getPending(sessionId)),
-  )
+  void generation
+  const [composerRailLive, setComposerRailLive] = useState(false)
+  useEffect(() => {
+    if (layout !== 'dock' || typeof document === 'undefined') return
+    const sync = (): void => {
+      setComposerRailLive(document.querySelector('[data-ocr-layout="composer"]') !== null)
+    }
+    sync()
+    const observer = new MutationObserver(sync)
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [layout, generation])
+
+  const ready = session === undefined ? EMPTY_FILES : files.get(session)
+  const pending = session === undefined ? EMPTY_PENDING : files.getPending(session)
   const activeRefs = useMemo(
     () => new Set(occurrences.filter(item => item.source === FILE_SOURCE).map(item => item.ref)),
     [occurrences],
   )
-  // Prefer occurrence-filtered cards when the input machine reports them; otherwise
-  // keep showing the store so a maybe-hook miss cannot blank the rail after OCR.
-  const active = sessionId === undefined
+  const active = session === undefined
     ? EMPTY_FILES
     : (activeRefs.size > 0 ? ready.filter(file => activeRefs.has(file.ref)) : ready)
   const refKey = [...activeRefs].join('\u0000')
 
   useEffect(() => {
-    if (sessionId === undefined || phase === 'submitting') return
-    const timer = setTimeout(() => { files.retain(sessionId, activeRefs) }, 1_000)
+    if (session === undefined || phase === 'submitting') return
+    const timer = setTimeout(() => { files.retain(session, activeRefs) }, 1_000)
     return () => clearTimeout(timer)
-  }, [activeRefs, files, phase, refKey, sessionId])
+  }, [activeRefs, files, phase, refKey, session])
 
-  if (sessionId === undefined || (active.length === 0 && pending.length === 0)) return null
-  return (
-    <div className={css.composerRail} aria-label="已添加的文件 / Added files">
-      <div className={css.rail}>
-        {pending.map((file: PendingFile) => (
-          <div
-            key={file.id}
-            className={`${css.card} ${file.status === 'error' ? css.cardError : css.cardPending}`}
-            aria-busy={file.status === 'extracting'}
-          >
-            <span className={`${css.fileIcon} ${file.status === 'error' ? css.generic : css.image}`} aria-hidden="true">
-              {file.status === 'extracting' ? <Spinner /> : <FileIcon size={16} />}
+  if (layout === 'dock' && composerRailLive) return null
+  if (session === undefined || (active.length === 0 && pending.length === 0)) return null
+  const body = (
+    <div className={css.rail} data-ocr-rail="1">
+      {pending.map((file: PendingFile) => (
+        <div
+          key={file.id}
+          className={`${css.card} ${file.status === 'error' ? css.cardError : css.cardPending}`}
+          aria-busy={file.status === 'extracting'}
+        >
+          <span className={`${css.fileIcon} ${file.status === 'error' ? css.generic : css.image}`} aria-hidden="true">
+            {file.status === 'extracting' ? <Spinner /> : <FileIcon size={16} />}
+          </span>
+          <span className={css.details}>
+            <span className={css.name} title={file.name}>{file.name}</span>
+            <span className={css.size}>
+              {file.status === 'extracting'
+                ? `OCR 辨識中… · ${fileSize(file.size)}`
+                : truncateError(file.error ?? '辨識失敗')}
             </span>
-            <span className={css.details}>
-              <span className={css.name} title={file.name}>{file.name}</span>
-              <span className={css.size}>
-                {file.status === 'extracting'
-                  ? `OCR 辨識中… · ${fileSize(file.size)}`
-                  : (file.error ?? '辨識失敗')}
-              </span>
-            </span>
-            <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.id) }}>
-              <IconCloseOutline16 size={14} />
-            </button>
-          </div>
-        ))}
-        {active.map((file: ExtractedFile) => (
-          <div key={file.ref} className={css.card}>
-            <span className={`${css.fileIcon} ${css[fileKindClass(file.kind)]}`} aria-hidden="true">
-              <FileIcon size={16} />
-            </span>
-            <span className={css.details}>
-              <span className={css.name} title={file.name}>{file.name}</span>
-              <span className={css.size}>{fileSize(file.size)} · {file.kind}</span>
-            </span>
-            <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.ref) }}>
-              <IconCloseOutline16 size={14} />
-            </button>
-          </div>
-        ))}
-      </div>
+          </span>
+          <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.id) }}>
+            <IconCloseOutline16 size={14} />
+          </button>
+        </div>
+      ))}
+      {active.map((file: ExtractedFile) => (
+        <div key={file.ref} className={css.card}>
+          <span className={`${css.fileIcon} ${css[fileKindClass(file.kind)]}`} aria-hidden="true">
+            <FileIcon size={16} />
+          </span>
+          <span className={css.details}>
+            <span className={css.name} title={file.name}>{file.name}</span>
+            <span className={css.size}>{fileSize(file.size)} · {file.kind}</span>
+          </span>
+          <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.ref) }}>
+            <IconCloseOutline16 size={14} />
+          </button>
+        </div>
+      ))}
     </div>
+  )
+  if (layout === 'dock') {
+    return (
+      <div className={css.dock} data-ocr-layout="dock" aria-label="已添加的文件 / Added files">
+        {body}
+      </div>
+    )
+  }
+  return (
+    <div className={css.composerRail} data-ocr-layout="composer" aria-label="已添加的文件 / Added files">
+      {body}
+    </div>
+  )
+}
+
+/** OCR/file cards styled like native FileCard, rendered inside the composer. */
+export function FileAttachmentRail(props: FileAttachmentRailProps): ReactNode {
+  return <AttachmentCards {...props} layout="composer" />
+}
+
+/** Same cards above the composer — reliable fallback when attachments shadow fails. */
+export function FileAttachmentDock(props: FileAttachmentDockProps): ReactNode {
+  return (
+    <AttachmentCards
+      useInput={props.useInput as FileAttachmentRailProps['useInput']}
+      files={props.files}
+      remove={props.remove}
+      ocrSessionId={props.ocrSessionId}
+      layout="dock"
+    />
   )
 }
 
@@ -373,12 +434,12 @@ export function createOcrComposerAttachments(ctx: Context): ComponentType<OcrCom
   function OcrComposerAttachments({
     files,
     remove,
-    sessionId,
+    ocrSessionId,
     useInput,
     ...nativeProps
   }: OcrComposerAttachmentsProps): ReactNode {
     const Native = ctx.slots.entries('conversation.input.attachments')
-      .find(entry => (entry.options.priority ?? 0) === 0)
+      .find(entry => (entry.options.priority ?? 0) === 0 && entry.component !== OcrComposerAttachments)
       ?.component as ComponentType<ComposerAttachmentsProps> | undefined
 
     return (
@@ -386,7 +447,7 @@ export function createOcrComposerAttachments(ctx: Context): ComponentType<OcrCom
         {Native !== undefined && (
           <Native {...(nativeProps as ComposerAttachmentsProps)} useInput={useInput} />
         )}
-        <FileAttachmentRail sessionId={sessionId} useInput={useInput} files={files} remove={remove} />
+        <FileAttachmentRail ocrSessionId={ocrSessionId} useInput={useInput} files={files} remove={remove} />
       </>
     )
   }

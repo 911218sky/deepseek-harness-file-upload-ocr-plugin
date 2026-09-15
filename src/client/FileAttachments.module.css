@@ -52,6 +52,16 @@
   padding: 2px 10px 0;
 }
 
+/* Backup: tuck against the composer card like native QueueDock. */
+.dock {
+  box-sizing: border-box;
+  flex: none;
+  width: calc(100% - var(--dsh-composer-side-clearance, 0px) - var(--dsh-composer-side-clearance, 0px) - var(--dsh-composer-dock-inset, 0px) - var(--dsh-composer-dock-inset, 0px));
+  max-width: calc(var(--dsh-composer-card-max-width, 100%) - var(--dsh-composer-dock-inset, 0px) - var(--dsh-composer-dock-inset, 0px));
+  margin: 0 auto calc(0px - var(--dsh-composer-stack-gap, 0px) - 3px);
+  padding: 0 var(--dsh-composer-dock-inset, 12px);
+}
+
 .rail {
   display: flex;
   flex-wrap: nowrap;
