@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import type { ReactNode } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import { Button, IconCloseOutline16, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { DropOverlay } from '@deepseek-ai/dsh-client-ui-attachment'
+import type { ComposerAttachmentsProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ExtractedFile, FileAttachmentStore } from './FileAttachmentStore.ts'
 import css from './FileAttachments.module.css'
@@ -26,7 +27,11 @@ export interface FileAttachmentRailInjected {
 }
 
 export type FileAttachButtonProps = PropsRuntime<'conversation.input.left'> & FileAttachButtonInjected
-export type FileAttachmentRailProps = PropsRuntime<'conversation.input.dock'> & FileAttachmentRailInjected
+export type FileAttachmentRailProps = Pick<PropsRuntime<'conversation.input.attachments'>, 'sessionId' | 'useInput'> & FileAttachmentRailInjected
+export type OcrComposerAttachmentsProps = ComposerAttachmentsProps & FileAttachmentRailInjected & {
+  /** Native ComposerAttachments shadowed at priority 0. */
+  NativeAttachments?: ComponentType<ComposerAttachmentsProps>
+}
 
 export function fileKindClass(kind: string): 'pdf' | 'image' | 'word' | 'excel' | 'powerpoint' | 'text' | 'generic' {
   switch (kind.toLowerCase()) {
@@ -256,28 +261,28 @@ function fileSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-/** Render extracted files as removable cards above the composer. */
+/** Render extracted files as removable cards inside the composer attachments area. */
 export function FileAttachmentRail({ sessionId, useInput, files, remove }: FileAttachmentRailProps): ReactNode {
-  const occurrences = useInput(state => state.occurrences)
-  const phase = useInput(state => state.phase)
+  const occurrences = useInput(state => state?.occurrences ?? [])
+  const phase = useInput(state => state?.phase)
   const snapshot = useSyncExternalStore(
-    listener => files.subscribe(sessionId, listener),
-    () => files.get(sessionId),
+    listener => (sessionId === undefined ? () => undefined : files.subscribe(sessionId, listener)),
+    () => (sessionId === undefined ? EMPTY_FILES : files.get(sessionId)),
   )
   const activeRefs = useMemo(
     () => new Set(occurrences.filter(item => item.source === FILE_SOURCE).map(item => item.ref)),
     [occurrences],
   )
-  const active = snapshot.filter(file => activeRefs.has(file.ref))
+  const active = sessionId === undefined ? EMPTY_FILES : snapshot.filter(file => activeRefs.has(file.ref))
   const refKey = [...activeRefs].join('\u0000')
 
   useEffect(() => {
-    if (phase === 'submitting') return
+    if (sessionId === undefined || phase === 'submitting') return
     const timer = setTimeout(() => { files.retain(sessionId, activeRefs) }, 1_000)
     return () => clearTimeout(timer)
   }, [activeRefs, files, phase, refKey, sessionId])
 
-  if (active.length === 0) return null
+  if (sessionId === undefined || active.length === 0) return null
   return (
     <div className={css.rail} aria-label="已添加的文件 / Added files">
       {active.map((file: ExtractedFile) => (
@@ -293,5 +298,27 @@ export function FileAttachmentRail({ sessionId, useInput, files, remove }: FileA
         </div>
       ))}
     </div>
+  )
+}
+
+const EMPTY_FILES: readonly ExtractedFile[] = []
+
+/**
+ * Shadow `conversation.input.attachments`: keep native image drafts, and place
+ * OCR/file cards in the same in-composer rail instead of the outer dock.
+ */
+export function OcrComposerAttachments({
+  NativeAttachments,
+  files,
+  remove,
+  sessionId,
+  useInput,
+  ...nativeProps
+}: OcrComposerAttachmentsProps): ReactNode {
+  return (
+    <>
+      {NativeAttachments !== undefined && <NativeAttachments {...nativeProps} sessionId={sessionId} useInput={useInput} />}
+      <FileAttachmentRail sessionId={sessionId} useInput={useInput} files={files} remove={remove} />
+    </>
   )
 }

@@ -6,11 +6,13 @@ import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {
   ComposerAttachment,
+  ComposerAttachmentsProps,
   DraftAttachmentId,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { InputTriggerSource, ReferenceInsert } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { FILE_SOURCE, FileAttachButton, FileAttachmentRail } from './FileAttachments.tsx'
+import type { ComponentType } from 'react'
+import { FILE_SOURCE, FileAttachButton, OcrComposerAttachments } from './FileAttachments.tsx'
 import { FileAttachmentStore, type ExtractedFile } from './FileAttachmentStore.ts'
 import { SentSteeringFileMessage, SentUserFileMessage } from './SentFileMessage.tsx'
 
@@ -30,14 +32,10 @@ function ensureHiddenChipStyles(): void {
   const tag = document.createElement('style')
   tag.dataset.plugin = 'dsh-file-upload-ocr-plugin'
   tag.dataset.pluginCss = tagId
-  // ReferenceChip sets title={label}; collapse those nodes so only the rail cards show.
+  // ReferenceChip sets title={label}; hide those nodes so only the rail cards show.
   tag.textContent = [
     `span[title=${JSON.stringify(HIDDEN_CHIP_LABEL)}]{`,
-    'position:absolute!important;',
-    'width:0!important;height:0!important;',
-    'margin:0!important;padding:0!important;border:0!important;',
-    'overflow:hidden!important;opacity:0!important;',
-    'pointer-events:none!important;',
+    'display:none!important;',
     '}',
   ].join('')
   document.head.appendChild(tag)
@@ -129,26 +127,35 @@ export function apply(ctx: Context): void {
     }),
   }, FileAttachButton))
 
-  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
-    name: 'conversation.input.dock',
-    id: 'file-attachments',
-    order: 5,
-    inject: (sessionId) => ({
-      files,
-      remove: (ref: string) => {
-        const { input } = scopedInput(sessionId)
-        const snapshot = input.state.getSnapshot()
-        const occurrence = snapshot.occurrences.find(item => item.source === FILE_SOURCE && item.ref === ref)
-        if (occurrence !== undefined) {
-          input.setDraft(
-            snapshot.draft.slice(0, occurrence.offset)
-            + snapshot.draft.slice(occurrence.offset + occurrence.length),
-          )
-        }
-        files.remove(sessionId, ref)
-      },
-    }),
-  }, FileAttachmentRail))
+  // Shadow native ComposerAttachments (priority 0) so OCR cards share the
+  // in-composer attachments rail instead of floating in conversation.input.dock.
+  ctx.slots.inject('conversation.input.attachments', () => {
+    const NativeAttachments = ctx.slots.entries('conversation.input.attachments')
+      .find(entry => (entry.options.priority ?? 0) === 0)
+      ?.component as ComponentType<ComposerAttachmentsProps> | undefined
+    return ctx.slots.register({
+      name: 'conversation.input.attachments',
+      locale: 'conversation',
+      priority: -10,
+      inject: (sessionId: SessionId | undefined) => ({
+        NativeAttachments,
+        files,
+        remove: (ref: string) => {
+          if (sessionId === undefined) return
+          const { input } = scopedInput(sessionId)
+          const snapshot = input.state.getSnapshot()
+          const occurrence = snapshot.occurrences.find(item => item.source === FILE_SOURCE && item.ref === ref)
+          if (occurrence !== undefined) {
+            input.setDraft(
+              snapshot.draft.slice(0, occurrence.offset)
+              + snapshot.draft.slice(occurrence.offset + occurrence.length),
+            )
+          }
+          files.remove(sessionId, ref)
+        },
+      }),
+    }, OcrComposerAttachments)
+  })
 
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
