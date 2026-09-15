@@ -16,6 +16,33 @@ import { SentSteeringFileMessage, SentUserFileMessage } from './SentFileMessage.
 
 export const inject = ['slots', 'sessions', 'conversation', 'inputTriggers']
 
+/**
+ * Invisible chip label. The composer still needs a Lexical reference occurrence
+ * so codec.serialize runs on send, but FileAttachmentRail is the only visible UI.
+ * Chips whose title is exactly this marker are hidden via injected CSS.
+ */
+const HIDDEN_CHIP_LABEL = '\uFEFF'
+
+function ensureHiddenChipStyles(): void {
+  if (typeof document === 'undefined') return
+  const tagId = 'dsh-file-upload-ocr-plugin/hidden-reference-chip'
+  if (document.querySelector(`style[data-plugin-css=${JSON.stringify(tagId)}]`) !== null) return
+  const tag = document.createElement('style')
+  tag.dataset.plugin = 'dsh-file-upload-ocr-plugin'
+  tag.dataset.pluginCss = tagId
+  // ReferenceChip sets title={label}; collapse those nodes so only the rail cards show.
+  tag.textContent = [
+    `span[title=${JSON.stringify(HIDDEN_CHIP_LABEL)}]{`,
+    'position:absolute!important;',
+    'width:0!important;height:0!important;',
+    'margin:0!important;padding:0!important;border:0!important;',
+    'overflow:hidden!important;opacity:0!important;',
+    'pointer-events:none!important;',
+    '}',
+  ].join('')
+  document.head.appendChild(tag)
+}
+
 /** Conversation draft helpers present on the runtime service but not the narrow IConversation face. */
 type ConversationDraftApi = {
   createDrafts(sessionId: SessionId, files: readonly File[]): readonly ComposerAttachment[]
@@ -24,6 +51,7 @@ type ConversationDraftApi = {
 
 /** Register generic file cards and their hidden model serializer. */
 export function apply(ctx: Context): void {
+  ensureHiddenChipStyles()
   const files = new FileAttachmentStore()
   const conversation = ctx.conversation as typeof ctx.conversation & ConversationDraftApi
   ctx.effect(() => () => { files.clear() }, 'file-input: extracted payloads')
@@ -74,7 +102,8 @@ export function apply(ctx: Context): void {
         const reference: ReferenceInsert = {
           source: FILE_SOURCE,
           ref: file.ref,
-          label: file.name,
+          // Keep an occurrence for serialize/send, but hide the inline chip visually.
+          label: HIDDEN_CHIP_LABEL,
           appearance: 'file',
           clipboardText: `[文件 / File: ${file.name}]`,
         }
