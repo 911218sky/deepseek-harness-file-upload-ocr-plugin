@@ -5,7 +5,7 @@ import { Button, IconCloseOutline16, Modal } from '@deepseek-ai/dsh-client-ui-pr
 import { DropOverlay } from '@deepseek-ai/dsh-client-ui-attachment'
 import type { ComposerAttachmentsProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ExtractedFile, FileAttachmentStore } from './FileAttachmentStore.ts'
+import type { ExtractedFile, FileAttachmentStore, PendingFile } from './FileAttachmentStore.ts'
 import css from './FileAttachments.module.css'
 
 const ENDPOINT = '/api/file-extract'
@@ -20,6 +20,9 @@ interface ExtractResponse {
 export interface FileAttachButtonInjected {
   attach(file: File, result: ExtractResponse): void
   attachImage?(file: File): Promise<void>
+  beginExtract(file: File): string
+  failExtract(id: string, error: string): void
+  clearPending(id: string): void
 }
 
 export interface FileAttachmentRailInjected {
@@ -57,7 +60,13 @@ export function FileIcon({ size = 16 }: { size?: number }): ReactNode {
 type ImageHandleMode = 'vision' | 'ocr'
 
 /** Add common local files through the generic extraction endpoint. */
-export function FileAttachButton({ attach, attachImage }: FileAttachButtonProps): ReactNode {
+export function FileAttachButton({
+  attach,
+  attachImage,
+  beginExtract,
+  failExtract,
+  clearPending,
+}: FileAttachButtonProps): ReactNode {
   const picker = useRef<HTMLInputElement | null>(null)
   const dragDepth = useRef(0)
   const busyRef = useRef(false)
@@ -75,24 +84,34 @@ export function FileAttachButton({ attach, attachImage }: FileAttachButtonProps)
       const useVision = imageMode === 'vision' && attachImage !== undefined
       for (const file of selected) {
         if (file.type.startsWith('image/') && useVision) {
-          await attachImage(file)
+          try {
+            await attachImage(file)
+          } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason))
+          }
           continue
         }
-        const response = await fetch(ENDPOINT, {
-          method: 'POST',
-          headers: {
-            'content-type': file.type || 'application/octet-stream',
-            'x-dsh-file-name': encodeURIComponent(file.name),
-          },
-          body: file,
-        })
-        const value = await response.json() as ExtractResponse | { error: string }
-        if (!response.ok) throw new Error('error' in value ? value.error : `文件解析失败 / File parsing failed（${response.status}）`)
-        if (!('text' in value) || !('kind' in value)) throw new Error('文件解析响应不完整 / File parsing response is incomplete.')
-        attach(file, value)
+        const pendingId = beginExtract(file)
+        try {
+          const response = await fetch(ENDPOINT, {
+            method: 'POST',
+            headers: {
+              'content-type': file.type || 'application/octet-stream',
+              'x-dsh-file-name': encodeURIComponent(file.name),
+            },
+            body: file,
+          })
+          const value = await response.json() as ExtractResponse | { error: string }
+          if (!response.ok) throw new Error('error' in value ? value.error : `文件解析失败 / File parsing failed（${response.status}）`)
+          if (!('text' in value) || !('kind' in value)) throw new Error('文件解析响应不完整 / File parsing response is incomplete.')
+          attach(file, value)
+          clearPending(pendingId)
+        } catch (reason) {
+          const message = reason instanceof Error ? reason.message : String(reason)
+          failExtract(pendingId, message)
+          setError(message)
+        }
       }
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
       busyRef.current = false
       setBusy(false)
@@ -260,20 +279,33 @@ function fileSize(bytes: number): string {
 }
 
 const EMPTY_FILES: readonly ExtractedFile[] = []
+const EMPTY_PENDING: readonly PendingFile[] = []
+
+function Spinner(): ReactNode {
+  return <span className={css.spinner} aria-hidden="true" />
+}
 
 /** OCR/file cards styled like native FileCard, rendered inside the composer. */
 export function FileAttachmentRail({ sessionId, useInput, files, remove }: FileAttachmentRailProps): ReactNode {
   const occurrences = useInput(state => state?.occurrences ?? [])
   const phase = useInput(state => state?.phase)
-  const snapshot = useSyncExternalStore(
+  const ready = useSyncExternalStore(
     listener => (sessionId === undefined ? () => {} : files.subscribe(sessionId, listener)),
     () => (sessionId === undefined ? EMPTY_FILES : files.get(sessionId)),
+  )
+  const pending = useSyncExternalStore(
+    listener => (sessionId === undefined ? () => {} : files.subscribe(sessionId, listener)),
+    () => (sessionId === undefined ? EMPTY_PENDING : files.getPending(sessionId)),
   )
   const activeRefs = useMemo(
     () => new Set(occurrences.filter(item => item.source === FILE_SOURCE).map(item => item.ref)),
     [occurrences],
   )
-  const active = sessionId === undefined ? EMPTY_FILES : snapshot.filter(file => activeRefs.has(file.ref))
+  // Prefer occurrence-filtered cards when the input machine reports them; otherwise
+  // keep showing the store so a maybe-hook miss cannot blank the rail after OCR.
+  const active = sessionId === undefined
+    ? EMPTY_FILES
+    : (activeRefs.size > 0 ? ready.filter(file => activeRefs.has(file.ref)) : ready)
   const refKey = [...activeRefs].join('\u0000')
 
   useEffect(() => {
@@ -282,10 +314,32 @@ export function FileAttachmentRail({ sessionId, useInput, files, remove }: FileA
     return () => clearTimeout(timer)
   }, [activeRefs, files, phase, refKey, sessionId])
 
-  if (sessionId === undefined || active.length === 0) return null
+  if (sessionId === undefined || (active.length === 0 && pending.length === 0)) return null
   return (
     <div className={css.composerRail} aria-label="已添加的文件 / Added files">
       <div className={css.rail}>
+        {pending.map((file: PendingFile) => (
+          <div
+            key={file.id}
+            className={`${css.card} ${file.status === 'error' ? css.cardError : css.cardPending}`}
+            aria-busy={file.status === 'extracting'}
+          >
+            <span className={`${css.fileIcon} ${file.status === 'error' ? css.generic : css.image}`} aria-hidden="true">
+              {file.status === 'extracting' ? <Spinner /> : <FileIcon size={16} />}
+            </span>
+            <span className={css.details}>
+              <span className={css.name} title={file.name}>{file.name}</span>
+              <span className={css.size}>
+                {file.status === 'extracting'
+                  ? `OCR 辨識中… · ${fileSize(file.size)}`
+                  : (file.error ?? '辨識失敗')}
+              </span>
+            </span>
+            <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.id) }}>
+              <IconCloseOutline16 size={14} />
+            </button>
+          </div>
+        ))}
         {active.map((file: ExtractedFile) => (
           <div key={file.ref} className={css.card}>
             <span className={`${css.fileIcon} ${css[fileKindClass(file.kind)]}`} aria-hidden="true">
