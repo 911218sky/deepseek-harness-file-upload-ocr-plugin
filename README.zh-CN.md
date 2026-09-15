@@ -99,7 +99,40 @@ pnpm dsh --profile web
 
 启动前设置 `DSH_FILE_OCR_PYTHON`，可在不改 YAML 的情况下指定 Python 环境。
 
-如果 Harness 提示“未安装 OCR 环境”，请在插件目录中重新运行对应平台的环境安装脚本，然后重启 `web` profile。
+## 常见问题：OCR 环境未安装
+
+### 现象
+
+上传图片并选择「本机 OCR 转文字」，或解析 PDF/图片时出现：
+
+`OCR 环境未安装 / OCR environment is not installed. 请运行 scripts/setup-ocr.ps1 或 scripts/setup-ocr.sh`
+
+### 原因
+
+从 GitHub / `pnpm add` / `dsh plugin add` 安装时，**不会**带上 `.venv/`（已在 `.gitignore`）。只装 JS 包、不同步 OCR 运行时，就会报这个错。换机器或 `pnpm update` 后也要重新建环境。
+
+### 解决
+
+在**已安装的插件目录**执行（不是只在 clone 的源码目录做一次就完事）：
+
+```bash
+cd "$DSH_HOME/profiles/web/node_modules/dsh-file-upload-ocr-plugin"
+chmod +x scripts/setup-ocr.sh
+./scripts/setup-ocr.sh
+# 然后重启 web profile / dsh-web
+```
+
+Windows 使用 `scripts\setup-ocr.ps1`。
+
+### 安装后确认
+
+```bash
+PLUGIN="$DSH_HOME/profiles/web/node_modules/dsh-file-upload-ocr-plugin"
+test -x "$PLUGIN/.venv/bin/python"
+"$PLUGIN/.venv/bin/python" -c "import rapidocr_onnxruntime, pypdfium2; print('ok')"
+```
+
+给 AI / Agent 的完整排错清单见 [AGENTS.md](./AGENTS.md)。
 
 ## 隐私、安全与开源协议
 

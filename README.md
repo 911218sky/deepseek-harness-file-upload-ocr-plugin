@@ -99,7 +99,40 @@ The bundle provides OCR defaults in `cordis.patch.yml`. Harness patches replace 
 
 Set `DSH_FILE_OCR_PYTHON` before startup to override the configured Python runtime without editing YAML.
 
-If Harness reports that the OCR environment is not installed, run the platform setup script again from the plugin folder and restart the `web` profile.
+## Troubleshooting: OCR environment is not installed
+
+### Symptom
+
+Attaching an image with **Local OCR to text**, or extracting PDF/images, returns:
+
+`OCR environment is not installed. Run scripts/setup-ocr.ps1 or scripts/setup-ocr.sh.`
+
+### Cause
+
+GitHub / `pnpm add` / `dsh plugin add` installs **do not** include `.venv/` (gitignored). Installing only the JS package, or syncing to another machine without re-running setup, triggers this error.
+
+### Fix
+
+Run setup in the **installed** package directory:
+
+```bash
+cd "$DSH_HOME/profiles/web/node_modules/dsh-file-upload-ocr-plugin"
+chmod +x scripts/setup-ocr.sh
+./scripts/setup-ocr.sh
+# then restart the web profile / dsh-web
+```
+
+On Windows use `scripts\setup-ocr.ps1`.
+
+### Verify after install
+
+```bash
+PLUGIN="$DSH_HOME/profiles/web/node_modules/dsh-file-upload-ocr-plugin"
+test -x "$PLUGIN/.venv/bin/python"
+"$PLUGIN/.venv/bin/python" -c "import rapidocr_onnxruntime, pypdfium2; print('ok')"
+```
+
+Full agent-oriented checklist: [AGENTS.md](./AGENTS.md).
 
 ## Privacy and security
 
