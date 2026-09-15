@@ -25,6 +25,18 @@ export class FileAttachmentStore {
   private readonly pending = new Map<SessionId, readonly PendingFile[]>()
   private readonly byRef = new Map<string, ExtractedFile>()
   private readonly listeners = new Map<SessionId, Set<() => void>>()
+  private readonly globalListeners = new Set<() => void>()
+  /** Last session that began/finished an extract — fallback when slot props omit sessionId. */
+  private activeSessionId: SessionId | undefined
+  private generation = 0
+
+  getActiveSessionId(): SessionId | undefined {
+    return this.activeSessionId
+  }
+
+  getGeneration(): number {
+    return this.generation
+  }
 
   get(sessionId: SessionId): readonly ExtractedFile[] {
     return this.sessions.get(sessionId) ?? EMPTY_READY
@@ -48,6 +60,12 @@ export class FileAttachmentStore {
     }
   }
 
+  /** Subscribe to any store change (including activeSessionId). */
+  subscribeGlobal(listener: () => void): () => void {
+    this.globalListeners.add(listener)
+    return () => { this.globalListeners.delete(listener) }
+  }
+
   beginExtract(sessionId: SessionId, file: File): string {
     const id = crypto.randomUUID()
     const row: PendingFile = {
@@ -57,7 +75,7 @@ export class FileAttachmentStore {
       status: 'extracting',
     }
     this.pending.set(sessionId, [...this.getPending(sessionId), row])
-    this.emit(sessionId)
+    this.touch(sessionId)
     return id
   }
 
@@ -66,7 +84,7 @@ export class FileAttachmentStore {
       row.id === id ? { ...row, status: 'error' as const, error } : row
     ))
     this.pending.set(sessionId, next)
-    this.emit(sessionId)
+    this.touch(sessionId)
   }
 
   clearPending(sessionId: SessionId, id: string): void {
@@ -74,13 +92,13 @@ export class FileAttachmentStore {
     if (next.length === this.getPending(sessionId).length) return
     if (next.length === 0) this.pending.delete(sessionId)
     else this.pending.set(sessionId, next)
-    this.emit(sessionId)
+    this.touch(sessionId)
   }
 
   add(sessionId: SessionId, file: ExtractedFile): void {
     this.byRef.set(file.ref, file)
     this.sessions.set(sessionId, [...this.get(sessionId), file])
-    this.emit(sessionId)
+    this.touch(sessionId)
   }
 
   remove(sessionId: SessionId, ref: string): void {
@@ -88,7 +106,7 @@ export class FileAttachmentStore {
     if (pendingNext.length !== this.getPending(sessionId).length) {
       if (pendingNext.length === 0) this.pending.delete(sessionId)
       else this.pending.set(sessionId, pendingNext)
-      this.emit(sessionId)
+      this.touch(sessionId)
       return
     }
     const next = this.get(sessionId).filter(file => file.ref !== ref)
@@ -96,7 +114,7 @@ export class FileAttachmentStore {
     this.byRef.delete(ref)
     if (next.length === 0) this.sessions.delete(sessionId)
     else this.sessions.set(sessionId, next)
-    this.emit(sessionId)
+    this.touch(sessionId)
   }
 
   retain(sessionId: SessionId, refs: ReadonlySet<string>): void {
@@ -110,20 +128,26 @@ export class FileAttachmentStore {
     }
     if (next.length === 0) this.sessions.delete(sessionId)
     else this.sessions.set(sessionId, next)
-    this.emit(sessionId)
+    this.touch(sessionId)
   }
 
   clear(): void {
     this.sessions.clear()
     this.pending.clear()
     this.byRef.clear()
+    this.activeSessionId = undefined
+    this.generation += 1
     for (const listeners of this.listeners.values()) {
       for (const listener of listeners) listener()
     }
     this.listeners.clear()
+    for (const listener of this.globalListeners) listener()
   }
 
-  private emit(sessionId: SessionId): void {
+  private touch(sessionId: SessionId): void {
+    this.activeSessionId = sessionId
+    this.generation += 1
     for (const listener of this.listeners.get(sessionId) ?? []) listener()
+    for (const listener of this.globalListeners) listener()
   }
 }

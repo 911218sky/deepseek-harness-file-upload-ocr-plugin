@@ -10,7 +10,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { InputTriggerSource, ReferenceInsert } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { FILE_SOURCE, FileAttachButton, createOcrComposerAttachments } from './FileAttachments.tsx'
+import { FILE_SOURCE, FileAttachButton, FileAttachmentDock, createOcrComposerAttachments } from './FileAttachments.tsx'
 import { FileAttachmentStore, type ExtractedFile } from './FileAttachmentStore.ts'
 import { SentSteeringFileMessage, SentUserFileMessage } from './SentFileMessage.tsx'
 
@@ -18,8 +18,8 @@ export const inject = ['slots', 'sessions', 'conversation', 'inputTriggers']
 
 /**
  * Invisible chip label. The composer still needs a Lexical reference occurrence
- * so codec.serialize runs on send, but the in-composer FileCard rail is the only
- * visible UI. Chips whose title is exactly this marker are hidden via CSS.
+ * so codec.serialize runs on send, but the FileCard rail is the only visible UI.
+ * Chips whose title is exactly this marker are hidden via CSS.
  */
 const HIDDEN_CHIP_LABEL = '\uFEFF'
 
@@ -78,6 +78,20 @@ export function apply(ctx: Context): void {
     return { actx, input: conversation.input.for(actx) }
   }
 
+  const removeFor = (sessionId: SessionId | undefined) => (ref: string) => {
+    if (sessionId === undefined) return
+    const { input } = scopedInput(sessionId)
+    const snapshot = input.state.getSnapshot()
+    const occurrence = snapshot.occurrences.find(item => item.source === FILE_SOURCE && item.ref === ref)
+    if (occurrence !== undefined) {
+      input.setDraft(
+        snapshot.draft.slice(0, occurrence.offset)
+        + snapshot.draft.slice(occurrence.offset + occurrence.length),
+      )
+    }
+    files.remove(sessionId, ref)
+  }
+
   ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
     name: 'conversation.input.left',
     id: 'file-input',
@@ -126,32 +140,31 @@ export function apply(ctx: Context): void {
     }),
   }, FileAttachButton))
 
-  // Inside the composer: shadow native attachments (priority 0) and append OCR FileCards.
-  // Native component is resolved at render time so load order cannot leave a blank rail.
+  // Inside composer: shadow native attachments. Use ocrSessionId (not sessionId) so
+  // session-maybe kit/owner merges cannot wipe the inject identity.
   const OcrComposerAttachments = createOcrComposerAttachments(ctx)
   ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
     name: 'conversation.input.attachments',
     locale: 'conversation',
     priority: -10,
-    // session-maybe does not put sessionId on component props — forward it via inject.
     inject: (sessionId: SessionId | undefined) => ({
       files,
-      sessionId,
-      remove: (ref: string) => {
-        if (sessionId === undefined) return
-        const { input } = scopedInput(sessionId)
-        const snapshot = input.state.getSnapshot()
-        const occurrence = snapshot.occurrences.find(item => item.source === FILE_SOURCE && item.ref === ref)
-        if (occurrence !== undefined) {
-          input.setDraft(
-            snapshot.draft.slice(0, occurrence.offset)
-            + snapshot.draft.slice(occurrence.offset + occurrence.length),
-          )
-        }
-        files.remove(sessionId, ref)
-      },
+      ocrSessionId: sessionId,
+      remove: removeFor(sessionId),
     }),
   }, OcrComposerAttachments))
+
+  // Backup dock (strict session). Hidden automatically when the in-composer rail mounts.
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+    name: 'conversation.input.dock',
+    id: 'file-attachments',
+    order: 5,
+    inject: (sessionId: SessionId) => ({
+      files,
+      ocrSessionId: sessionId,
+      remove: removeFor(sessionId),
+    }),
+  }, FileAttachmentDock))
 
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
