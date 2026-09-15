@@ -8,6 +8,8 @@
 
 ## 功能
 
+需要 DeepSeek Harness **0.1.5-rc.1+**（peer 依赖目标为 `@deepseek-ai/*@^0.1.5-rc.1`）。
+
 - 输入框上方和发送后的对话记录都使用真正的文件附件卡片。
 - 支持将文件拖到 Harness 窗口任意位置上传。
 - PDF、图片、Word、Excel、PowerPoint 和文本文件使用不同的卡片强调色。
@@ -28,7 +30,7 @@
 ### Windows PowerShell
 
 ```powershell
-git clone https://github.com/BYYY-eng/deepseek-harness-file-upload-ocr-plugin.git
+git clone https://github.com/911218sky/deepseek-harness-file-upload-ocr-plugin.git
 cd deepseek-harness-file-upload-ocr-plugin
 powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile web
 dsh --profile web
@@ -37,7 +39,7 @@ dsh --profile web
 ### Linux / macOS
 
 ```bash
-git clone https://github.com/BYYY-eng/deepseek-harness-file-upload-ocr-plugin.git
+git clone https://github.com/911218sky/deepseek-harness-file-upload-ocr-plugin.git
 cd deepseek-harness-file-upload-ocr-plugin
 chmod +x scripts/*.sh
 ./scripts/install.sh web
