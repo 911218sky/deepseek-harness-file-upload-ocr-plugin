@@ -52,14 +52,14 @@
   padding: 6px 10px 10px;
 }
 
-/* Backup: tuck against the composer card like native QueueDock. */
+/* Backup above composer: keep width alignment, leave clear gap above the input card. */
 .dock {
   box-sizing: border-box;
   flex: none;
   width: calc(100% - var(--dsh-composer-side-clearance, 0px) - var(--dsh-composer-side-clearance, 0px) - var(--dsh-composer-dock-inset, 0px) - var(--dsh-composer-dock-inset, 0px));
   max-width: calc(var(--dsh-composer-card-max-width, 100%) - var(--dsh-composer-dock-inset, 0px) - var(--dsh-composer-dock-inset, 0px));
-  margin: 0 auto calc(0px - var(--dsh-composer-stack-gap, 0px) - 3px);
-  padding: 0 var(--dsh-composer-dock-inset, 12px);
+  margin: 0 auto 0;
+  padding: 0 var(--dsh-composer-dock-inset, 12px) 10px;
 }
 
 .rail {
