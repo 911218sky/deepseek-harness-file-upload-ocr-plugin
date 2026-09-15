@@ -1,112 +1,105 @@
-/**
- * Standalone tsdown config for this plugin (no monorepo clientBundle import).
- * Host: ESM Node entry. Client: ModuleLoader factory with CSS Modules via lightningcss.
- */
 import { readFile } from 'node:fs/promises'
-import { dirname, isAbsolute, resolve as resolvePath } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { dirname, resolve as resolvePath } from 'node:path'
 import { transform } from 'lightningcss'
-import { defineConfig } from 'tsdown'
+import type { UserConfig } from 'tsdown'
 
 const PACKAGE_ID = 'dsh-file-upload-ocr-plugin'
-const ROOT = dirname(fileURLToPath(import.meta.url))
-
 const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'
 
-const CLIENT_EXTERNALS = [
-  'react',
-  'react/jsx-runtime',
-  'react-dom',
-  'react-dom/client',
-  /^@deepseek-ai\//,
-]
-
 function styleInjectionModule(
-  id: string,
   fileId: string,
   css: string,
   classMap?: Readonly<Record<string, string>>,
 ): string {
-  const source = [
+  const tagId = `${PACKAGE_ID}/${fileId.split(/[\\/]/).slice(-1)[0]}`
+  const lines = [
     `const css = ${JSON.stringify(css)};`,
-    `const tagId = ${JSON.stringify(`${id}/${fileId.split(/[\\/]/).slice(-1)[0]}`)};`,
+    `const tagId = ${JSON.stringify(tagId)};`,
     'if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {',
     '  const tag = document.createElement("style");',
-    `  tag.dataset.plugin = ${JSON.stringify(id)};`,
+    `  tag.dataset.plugin = ${JSON.stringify(PACKAGE_ID)};`,
     '  tag.dataset.pluginCss = tagId;',
     '  tag.textContent = css;',
     '  document.head.appendChild(tag);',
     '}',
   ]
-  if (classMap === undefined) {
-    source.push('export {};')
+  if (classMap !== undefined) {
+    lines.push(`module.exports = ${JSON.stringify(classMap)};`)
   } else {
-    source.push(`export default ${JSON.stringify(classMap)};`)
+    lines.push('module.exports = {};')
   }
-  return source.join('\n')
+  return lines.join('\n')
 }
 
-function cssModulesPlugin(id: string) {
-  return {
-    name: 'dsh-css-modules',
-    resolveId(source: string, importer: string | undefined) {
-      if (!source.endsWith('.module.css')) return null
-      const abs = importer !== undefined
-        ? (isAbsolute(source) ? source : resolvePath(dirname(importer), source))
-        : resolvePath(ROOT, source)
-      return CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
-    },
-    async load(virtualId: string) {
-      if (!virtualId.startsWith(CSS_VIRTUAL_PREFIX)) return null
-      const fileId = virtualId.slice(CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
-      this.addWatchFile(fileId)
-      const source = await readFile(fileId)
-      const { code, exports: cssExports } = transform({
-        filename: fileId,
-        code: source,
-        cssModules: { pattern: '[hash]_[local]' },
-        minify: true,
-      })
-      const classMap: Record<string, string> = {}
-      for (const [local, exp] of Object.entries(cssExports ?? {})) {
-        classMap[local] = exp.name
-      }
-      return styleInjectionModule(id, fileId, code.toString(), classMap)
-    },
-  }
+const cssModulesPlugin = {
+  name: 'dsh-css-modules',
+  resolveId(source: string, importer: string | undefined) {
+    if (!source.endsWith('.module.css')) return null
+    const abs = importer !== undefined ? resolvePath(dirname(importer), source) : resolvePath(source)
+    return CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
+  },
+  async load(virtualId: string) {
+    if (!virtualId.startsWith(CSS_VIRTUAL_PREFIX)) return null
+    const fileId = virtualId.slice(CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
+    this.addWatchFile(fileId)
+    const source = await readFile(fileId)
+    const { code, exports: cssExports } = transform({
+      filename: fileId,
+      code: source,
+      cssModules: { pattern: '[hash]_[local]' },
+      minify: true,
+    })
+    const classMap: Record<string, string> = {}
+    for (const [local, exp] of Object.entries(cssExports ?? {})) {
+      classMap[local] = exp.name
+    }
+    return styleInjectionModule(fileId, code.toString(), classMap)
+  },
 }
 
-export default defineConfig([
+const neverBundle = [
+  /^node:/,
+  /^@deepseek-ai\//,
+  'react',
+  'react/jsx-runtime',
+  'react-dom',
+]
+
+const config: UserConfig = [
   {
-    entry: ['src/index.ts'],
-    format: 'esm',
-    outDir: 'lib',
+    entry: { index: 'src/index.ts' },
+    format: ['esm'],
     platform: 'node',
+    outDir: 'lib',
+    clean: false,
     dts: false,
     sourcemap: false,
-    clean: false,
-    external: [/^node:/, /^@deepseek-ai\//],
+    deps: { neverBundle },
     outputOptions: {
       entryFileNames: 'index.js',
     },
   },
   {
-    entry: ['src/client/index.ts'],
+    entry: { client: 'src/client/index.ts' },
     format: ['cjs'],
-    outDir: 'lib',
     platform: 'browser',
+    outDir: 'lib',
+    clean: false,
     dts: false,
     sourcemap: true,
-    clean: false,
-    external: CLIENT_EXTERNALS,
-    plugins: [cssModulesPlugin(PACKAGE_ID)],
+    deps: { neverBundle },
+    plugins: [cssModulesPlugin],
     outputOptions: {
       entryFileNames: 'client.js',
+      // ModuleLoader factory receives require(); keep CommonJS requires.
       format: 'cjs',
+      exports: 'named',
       banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PACKAGE_ID)}, factory: (require) => {`,
-      footer: 'return module.exports; } });',
-      intro: 'var module = { exports: {} }; var exports = module.exports;',
+      footer: 'return module.exports;\n} });',
+      intro: 'var module = { exports: {} };\nvar exports = module.exports;',
     },
   },
-])
+]
+
+export default config
