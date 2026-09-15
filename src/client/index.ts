@@ -10,7 +10,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { InputTriggerSource, ReferenceInsert } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { FILE_SOURCE, FileAttachButton, FileAttachmentRail } from './FileAttachments.tsx'
+import { FILE_SOURCE, FileAttachButton, createOcrComposerAttachments } from './FileAttachments.tsx'
 import { FileAttachmentStore, type ExtractedFile } from './FileAttachmentStore.ts'
 import { SentSteeringFileMessage, SentUserFileMessage } from './SentFileMessage.tsx'
 
@@ -18,8 +18,8 @@ export const inject = ['slots', 'sessions', 'conversation', 'inputTriggers']
 
 /**
  * Invisible chip label. The composer still needs a Lexical reference occurrence
- * so codec.serialize runs on send, but FileAttachmentRail is the only visible UI.
- * Chips whose title is exactly this marker are hidden via injected CSS.
+ * so codec.serialize runs on send, but the in-composer FileCard rail is the only
+ * visible UI. Chips whose title is exactly this marker are hidden via CSS.
  */
 const HIDDEN_CHIP_LABEL = '\uFEFF'
 
@@ -30,7 +30,6 @@ function ensureHiddenChipStyles(): void {
   const tag = document.createElement('style')
   tag.dataset.plugin = 'dsh-file-upload-ocr-plugin'
   tag.dataset.pluginCss = tagId
-  // ReferenceChip sets title={label}; hide those nodes so only the rail cards show.
   tag.textContent = [
     `span[title=${JSON.stringify(HIDDEN_CHIP_LABEL)}]{`,
     'display:none!important;',
@@ -98,7 +97,6 @@ export function apply(ctx: Context): void {
         const reference: ReferenceInsert = {
           source: FILE_SOURCE,
           ref: file.ref,
-          // Keep an occurrence for serialize/send, but hide the inline chip visually.
           label: HIDDEN_CHIP_LABEL,
           appearance: 'file',
           clipboardText: `[文件 / File: ${file.name}]`,
@@ -125,13 +123,17 @@ export function apply(ctx: Context): void {
     }),
   }, FileAttachButton))
 
-  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
-    name: 'conversation.input.dock',
-    id: 'file-attachments',
-    order: 5,
-    inject: (sessionId) => ({
+  // Inside the composer: shadow native attachments (priority 0) and append OCR FileCards.
+  // Native component is resolved at render time so load order cannot leave a blank rail.
+  const OcrComposerAttachments = createOcrComposerAttachments(ctx)
+  ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
+    name: 'conversation.input.attachments',
+    locale: 'conversation',
+    priority: -10,
+    inject: (sessionId: SessionId | undefined) => ({
       files,
       remove: (ref: string) => {
+        if (sessionId === undefined) return
         const { input } = scopedInput(sessionId)
         const snapshot = input.state.getSnapshot()
         const occurrence = snapshot.occurrences.find(item => item.source === FILE_SOURCE && item.ref === ref)
@@ -144,7 +146,7 @@ export function apply(ctx: Context): void {
         files.remove(sessionId, ref)
       },
     }),
-  }, FileAttachmentRail))
+  }, OcrComposerAttachments))
 
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',

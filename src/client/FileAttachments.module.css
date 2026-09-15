@@ -45,36 +45,41 @@
   white-space: nowrap;
 }
 
-/* Match native QueueDock width so cards sit flush above the composer card. */
-.dock {
-  box-sizing: border-box;
-  flex: none;
-  width: calc(100% - var(--dsh-composer-side-clearance) - var(--dsh-composer-side-clearance) - var(--dsh-composer-dock-inset) - var(--dsh-composer-dock-inset));
-  max-width: calc(var(--dsh-composer-card-max-width) - var(--dsh-composer-dock-inset) - var(--dsh-composer-dock-inset));
-  margin: 0 auto calc(0px - var(--dsh-composer-stack-gap, 0px) - 3px);
-  padding: 0 var(--dsh-composer-dock-inset);
+/* Same inset as native ComposerAttachments rail (inside the composer card). */
+.composerRail {
+  min-width: 0;
+  margin-bottom: -6px;
+  padding: 2px 10px 0;
 }
 
 .rail {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  width: 100%;
-  padding: 0 0 8px;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 10px;
+  min-width: 0;
+  overflow: auto hidden;
+  scrollbar-width: none;
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
 }
 
 .card {
   display: inline-flex;
+  position: relative;
   box-sizing: border-box;
+  flex: none;
   align-items: center;
   gap: 10px;
-  width: min(240px, 100%);
+  width: 240px;
   height: 64px;
   padding: 0 12px;
   border: 0.5px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 12%));
   border-radius: 16px;
   color: var(--dsw-alias-label-primary);
-  background: var(--dsw-specific-input-major, var(--dsw-alias-bg-layer-1));
+  background: var(--dsw-specific-input-major, transparent);
   text-align: left;
 }
 
@@ -103,19 +108,25 @@
   flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
+  padding: 8px 0;
 }
 
 .name {
   overflow: hidden;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
+  line-height: 22px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .size {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary, rgb(0 0 0 / 45%));
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .remove {
