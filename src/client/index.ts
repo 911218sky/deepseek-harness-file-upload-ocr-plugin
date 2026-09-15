@@ -133,8 +133,10 @@ export function apply(ctx: Context): void {
     name: 'conversation.input.attachments',
     locale: 'conversation',
     priority: -10,
+    // session-maybe does not put sessionId on component props — forward it via inject.
     inject: (sessionId: SessionId | undefined) => ({
       files,
+      sessionId,
       remove: (ref: string) => {
         if (sessionId === undefined) return
         const { input } = scopedInput(sessionId)

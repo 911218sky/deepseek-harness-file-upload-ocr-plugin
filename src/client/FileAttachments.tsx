@@ -5,6 +5,7 @@ import { Button, IconCloseOutline16, Modal } from '@deepseek-ai/dsh-client-ui-pr
 import { DropOverlay } from '@deepseek-ai/dsh-client-ui-attachment'
 import type { ComposerAttachmentsProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ExtractedFile, FileAttachmentStore, PendingFile } from './FileAttachmentStore.ts'
 import css from './FileAttachments.module.css'
 
@@ -28,10 +29,15 @@ export interface FileAttachButtonInjected {
 export interface FileAttachmentRailInjected {
   files: FileAttachmentStore
   remove(ref: string): void
+  /**
+   * session-maybe slots do not put sessionId on PropsRuntime; inject must
+   * forward the id from InjectParams so the rail can read the store.
+   */
+  sessionId: SessionId | undefined
 }
 
 export type FileAttachButtonProps = PropsRuntime<'conversation.input.left'> & FileAttachButtonInjected
-export type FileAttachmentRailProps = Pick<PropsRuntime<'conversation.input.attachments'>, 'sessionId' | 'useInput'> & FileAttachmentRailInjected
+export type FileAttachmentRailProps = Pick<PropsRuntime<'conversation.input.attachments'>, 'useInput'> & FileAttachmentRailInjected
 export type OcrComposerAttachmentsProps = ComposerAttachmentsProps & FileAttachmentRailInjected
 
 export function fileKindClass(kind: string): 'pdf' | 'image' | 'word' | 'excel' | 'powerpoint' | 'text' | 'generic' {
@@ -378,7 +384,7 @@ export function createOcrComposerAttachments(ctx: Context): ComponentType<OcrCom
     return (
       <>
         {Native !== undefined && (
-          <Native {...nativeProps} sessionId={sessionId} useInput={useInput} />
+          <Native {...(nativeProps as ComposerAttachmentsProps)} useInput={useInput} />
         )}
         <FileAttachmentRail sessionId={sessionId} useInput={useInput} files={files} remove={remove} />
       </>
