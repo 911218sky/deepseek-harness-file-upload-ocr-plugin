@@ -83,6 +83,9 @@ export function apply(ctx: Context): void {
     id: 'file-input',
     order: 30,
     inject: (sessionId) => ({
+      beginExtract: (browserFile: File) => files.beginExtract(sessionId, browserFile),
+      failExtract: (id: string, error: string) => { files.failExtract(sessionId, id, error) },
+      clearPending: (id: string) => { files.clearPending(sessionId, id) },
       attach: (browserFile: File, result: { kind: string; text: string }) => {
         const { actx, input } = scopedInput(sessionId)
         const snapshot = input.state.getSnapshot()
