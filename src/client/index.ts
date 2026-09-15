@@ -6,13 +6,11 @@ import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {
   ComposerAttachment,
-  ComposerAttachmentsProps,
   DraftAttachmentId,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { InputTriggerSource, ReferenceInsert } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import type { ComponentType } from 'react'
-import { FILE_SOURCE, FileAttachButton, OcrComposerAttachments } from './FileAttachments.tsx'
+import { FILE_SOURCE, FileAttachButton, FileAttachmentRail } from './FileAttachments.tsx'
 import { FileAttachmentStore, type ExtractedFile } from './FileAttachmentStore.ts'
 import { SentSteeringFileMessage, SentUserFileMessage } from './SentFileMessage.tsx'
 
@@ -127,35 +125,26 @@ export function apply(ctx: Context): void {
     }),
   }, FileAttachButton))
 
-  // Shadow native ComposerAttachments (priority 0) so OCR cards share the
-  // in-composer attachments rail instead of floating in conversation.input.dock.
-  ctx.slots.inject('conversation.input.attachments', () => {
-    const NativeAttachments = ctx.slots.entries('conversation.input.attachments')
-      .find(entry => (entry.options.priority ?? 0) === 0)
-      ?.component as ComponentType<ComposerAttachmentsProps> | undefined
-    return ctx.slots.register({
-      name: 'conversation.input.attachments',
-      locale: 'conversation',
-      priority: -10,
-      inject: (sessionId: SessionId | undefined) => ({
-        NativeAttachments,
-        files,
-        remove: (ref: string) => {
-          if (sessionId === undefined) return
-          const { input } = scopedInput(sessionId)
-          const snapshot = input.state.getSnapshot()
-          const occurrence = snapshot.occurrences.find(item => item.source === FILE_SOURCE && item.ref === ref)
-          if (occurrence !== undefined) {
-            input.setDraft(
-              snapshot.draft.slice(0, occurrence.offset)
-              + snapshot.draft.slice(occurrence.offset + occurrence.length),
-            )
-          }
-          files.remove(sessionId, ref)
-        },
-      }),
-    }, OcrComposerAttachments)
-  })
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+    name: 'conversation.input.dock',
+    id: 'file-attachments',
+    order: 5,
+    inject: (sessionId) => ({
+      files,
+      remove: (ref: string) => {
+        const { input } = scopedInput(sessionId)
+        const snapshot = input.state.getSnapshot()
+        const occurrence = snapshot.occurrences.find(item => item.source === FILE_SOURCE && item.ref === ref)
+        if (occurrence !== undefined) {
+          input.setDraft(
+            snapshot.draft.slice(0, occurrence.offset)
+            + snapshot.draft.slice(occurrence.offset + occurrence.length),
+          )
+        }
+        files.remove(sessionId, ref)
+      },
+    }),
+  }, FileAttachmentRail))
 
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
