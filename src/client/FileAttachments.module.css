@@ -45,11 +45,11 @@
   white-space: nowrap;
 }
 
-/* Same inset as native ComposerAttachments rail (inside the composer card). */
+/* Inside composer: keep side inset, leave clear gap above the editor. */
 .composerRail {
   min-width: 0;
-  margin-bottom: -6px;
-  padding: 2px 10px 0;
+  margin-bottom: 0;
+  padding: 6px 10px 10px;
 }
 
 /* Backup: tuck against the composer card like native QueueDock. */
