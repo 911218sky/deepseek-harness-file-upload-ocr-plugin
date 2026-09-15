@@ -184,23 +184,25 @@ function fileSize(bytes: number): string {
 }
 
 /** Render extracted files as removable cards above the composer. */
-export function FileAttachmentRail({ sessionId, input, files, remove }: FileAttachmentRailProps): ReactNode {
+export function FileAttachmentRail({ sessionId, useInput, files, remove }: FileAttachmentRailProps): ReactNode {
+  const occurrences = useInput(state => state.occurrences)
+  const phase = useInput(state => state.phase)
   const snapshot = useSyncExternalStore(
     listener => files.subscribe(sessionId, listener),
     () => files.get(sessionId),
   )
   const activeRefs = useMemo(
-    () => new Set(input.occurrences.filter(item => item.source === FILE_SOURCE).map(item => item.ref)),
-    [input.occurrences],
+    () => new Set(occurrences.filter(item => item.source === FILE_SOURCE).map(item => item.ref)),
+    [occurrences],
   )
   const active = snapshot.filter(file => activeRefs.has(file.ref))
   const refKey = [...activeRefs].join('\u0000')
 
   useEffect(() => {
-    if (input.phase === 'submitting') return
+    if (phase === 'submitting') return
     const timer = setTimeout(() => { files.retain(sessionId, activeRefs) }, 1_000)
     return () => clearTimeout(timer)
-  }, [activeRefs, files, input.phase, refKey, sessionId])
+  }, [activeRefs, files, phase, refKey, sessionId])
 
   if (active.length === 0) return null
   return (

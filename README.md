@@ -8,6 +8,8 @@
 
 ## Features
 
+Requires DeepSeek Harness **0.1.5-rc.1+** (peer dependencies target `@deepseek-ai/*@^0.1.5-rc.1`).
+
 - Real attachment cards in the composer and sent conversation messages.
 - Drag files anywhere over the Harness window to upload them.
 - File cards use different accent colors for PDF, images, Word, Excel, PowerPoint, and text files.
@@ -28,7 +30,7 @@ The installer creates the local Python environment first, then registers this pa
 ### Windows PowerShell
 
 ```powershell
-git clone https://github.com/BYYY-eng/deepseek-harness-file-upload-ocr-plugin.git
+git clone https://github.com/911218sky/deepseek-harness-file-upload-ocr-plugin.git
 cd deepseek-harness-file-upload-ocr-plugin
 powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile web
 dsh --profile web
@@ -37,7 +39,7 @@ dsh --profile web
 ### Linux / macOS
 
 ```bash
-git clone https://github.com/BYYY-eng/deepseek-harness-file-upload-ocr-plugin.git
+git clone https://github.com/911218sky/deepseek-harness-file-upload-ocr-plugin.git
 cd deepseek-harness-file-upload-ocr-plugin
 chmod +x scripts/*.sh
 ./scripts/install.sh web

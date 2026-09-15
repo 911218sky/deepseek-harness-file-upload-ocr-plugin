@@ -1,15 +1,25 @@
 {
   "name": "dsh-file-upload-ocr-plugin",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "DeepSeek Harness 文件上传与本地 OCR 插件 / File upload and local OCR plugin for DeepSeek Harness: PDF, Word, Excel, PowerPoint, images, and text attachments.",
-  "keywords": ["deepseek-harness", "deepseek", "harness-plugin", "file-upload", "pdf-ocr", "ocr", "document-attachment", "word", "excel"],
+  "keywords": [
+    "deepseek-harness",
+    "deepseek",
+    "harness-plugin",
+    "file-upload",
+    "pdf-ocr",
+    "ocr",
+    "document-attachment",
+    "word",
+    "excel"
+  ],
   "author": "BYYY-eng",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/BYYY-eng/deepseek-harness-file-upload-ocr-plugin.git"
+    "url": "git+https://github.com/911218sky/deepseek-harness-file-upload-ocr-plugin.git"
   },
-  "homepage": "https://github.com/BYYY-eng/deepseek-harness-file-upload-ocr-plugin#readme",
-  "bugs": "https://github.com/BYYY-eng/deepseek-harness-file-upload-ocr-plugin/issues",
+  "homepage": "https://github.com/911218sky/deepseek-harness-file-upload-ocr-plugin#readme",
+  "bugs": "https://github.com/911218sky/deepseek-harness-file-upload-ocr-plugin/issues",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
@@ -40,32 +50,50 @@
     },
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-api-session-controller",
         "@deepseek-ai/dsh-client-ui-attachment",
+        "@deepseek-ai/dsh-client-ui-chat",
         "@deepseek-ai/dsh-client-ui-conversation",
-        "@deepseek-ai/dsh-client-ui-input-trigger"
+        "@deepseek-ai/dsh-client-ui-input-trigger",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-slots"
       ],
       "platform": "web"
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-attachment": "0.1.0-rc.5",
-    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.5",
-    "@deepseek-ai/dsh-client-ui-attachment": "0.1.0-rc.5",
-    "@deepseek-ai/dsh-client-ui-conversation": "0.1.0-rc.5",
-    "@deepseek-ai/dsh-client-ui-input-trigger": "0.1.0-rc.5",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.5",
-    "@deepseek-ai/dsh-client-ui-slots": "0.1.0-rc.5",
-    "@deepseek-ai/dsh-host-webserver": "0.1.0-rc.5",
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-api-session-controller": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-attachment": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-attachment": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-chat": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-conversation": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-input-trigger": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-host-webserver": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-session": "^0.1.5-rc.1",
     "react": "^18.2.0"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-api-session-controller": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-attachment": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-attachment": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-chat": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-input-trigger": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-host-webserver": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-session": "0.1.5-rc.1",
     "@types/node": "^22.20.0",
     "@types/react": "~18.3.1",
+    "lightningcss": "^1.33.0",
+    "react": "^18.2.0",
     "tsdown": "^0.22.2",
     "typescript": "^6.0.3"
   }
