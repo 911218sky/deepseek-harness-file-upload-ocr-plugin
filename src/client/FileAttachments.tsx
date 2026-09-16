@@ -24,6 +24,7 @@ export interface FileAttachButtonInjected {
   beginExtract(file: File): string
   failExtract(id: string, error: string): void
   clearPending(id: string): void
+  hasPending(id: string): boolean
 }
 
 export interface FileAttachmentRailInjected {
@@ -73,6 +74,7 @@ export function FileAttachButton({
   beginExtract,
   failExtract,
   clearPending,
+  hasPending,
 }: FileAttachButtonProps): ReactNode {
   const picker = useRef<HTMLInputElement | null>(null)
   const dragDepth = useRef(0)
@@ -108,9 +110,15 @@ export function FileAttachButton({
             },
             body: file,
           })
-          const value = await response.json() as ExtractResponse | { error: string }
+          let value: ExtractResponse | { error: string }
+          try {
+            value = await response.json() as ExtractResponse | { error: string }
+          } catch {
+            throw new Error(`文件解析失败 / File parsing failed（${response.status}）`)
+          }
           if (!response.ok) throw new Error('error' in value ? value.error : `文件解析失败 / File parsing failed（${response.status}）`)
           if (!('text' in value) || !('kind' in value)) throw new Error('文件解析响应不完整 / File parsing response is incomplete.')
+          if (!hasPending(pendingId)) continue
           attach(file, value)
           clearPending(pendingId)
         } catch (reason) {
@@ -317,6 +325,7 @@ function AttachmentCards({
 }): ReactNode {
   const session = useResolvedSessionId(ocrSessionId, files)
   const occurrences = useInput(state => state?.occurrences ?? [])
+  const draft = useInput(state => state?.draft ?? '')
   const phase = useInput(state => state?.phase)
   const generation = useSyncExternalStore(
     listener => files.subscribeGlobal(listener),
@@ -343,14 +352,23 @@ function AttachmentCards({
   )
   const active = session === undefined
     ? EMPTY_FILES
-    : (activeRefs.size > 0 ? ready.filter(file => activeRefs.has(file.ref)) : ready)
+    : ready.filter(file => activeRefs.has(file.ref))
   const refKey = [...activeRefs].join('\u0000')
+  const draftEmpty = draft.trim().length === 0
 
   useEffect(() => {
-    if (session === undefined || phase === 'submitting') return
-    const timer = setTimeout(() => { files.retain(session, activeRefs) }, 1_000)
+    if (session === undefined) return
+    // Message sent without waiting for OCR: cancel in-flight cards so they do not reappear.
+    if (phase === 'submitting' && activeRefs.size === 0) files.discardPending(session)
+    if (phase === 'submitting') return
+    // After send the draft clears before occurrences settle; drop orphaned store rows once stable.
+    const delay = activeRefs.size === 0 && draftEmpty ? 250 : 1_000
+    const timer = setTimeout(() => {
+      files.retain(session, activeRefs)
+      if (activeRefs.size === 0 && draftEmpty) files.discardPending(session)
+    }, delay)
     return () => clearTimeout(timer)
-  }, [activeRefs, files, phase, refKey, session])
+  }, [activeRefs, draftEmpty, files, phase, refKey, session])
 
   if (layout === 'dock' && composerRailLive) return null
   if (session === undefined || (active.length === 0 && pending.length === 0)) return null

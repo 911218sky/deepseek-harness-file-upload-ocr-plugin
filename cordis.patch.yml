@@ -7,5 +7,5 @@
         maxPages: 50
         dpi: 144
         nativeTextMinChars: 24
-        timeoutMs: 120000
+        timeoutMs: 300000
         maxOutputChars: 200000

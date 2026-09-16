@@ -28,13 +28,16 @@ class TextHTMLParser(HTMLParser):
 
 def pdf_text(data: bytes, args: argparse.Namespace) -> str:
     document = pdfium.PdfDocument(data)
-    if len(document) > args.max_pages:
-        raise ValueError(
-            f"PDF 页数为 {len(document)}，超过配置上限 {args.max_pages} / PDF has {len(document)} pages; configured limit is {args.max_pages}."
-        )
+    total_pages = len(document)
+    page_limit = min(total_pages, args.max_pages)
     engine = None
     pages = []
-    for index in range(len(document)):
+    if total_pages > args.max_pages:
+        pages.append(
+            f"--- 已截断 / Truncated: processed first {page_limit} of {total_pages} pages "
+            f"(configured limit {args.max_pages}) ---"
+        )
+    for index in range(page_limit):
         page = document[index]
         text_page = page.get_textpage()
         text = text_page.get_text_range().strip()
@@ -66,12 +69,15 @@ def word_text(data: bytes) -> str:
 
 def excel_text(data: bytes, max_sheets: int) -> str:
     workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
-    if len(workbook.sheetnames) > max_sheets:
-        raise ValueError(
-            f"工作簿有 {len(workbook.sheetnames)} 个工作表，超过配置上限 {max_sheets} / Workbook has {len(workbook.sheetnames)} sheets; configured limit is {max_sheets}."
-        )
+    total_sheets = len(workbook.sheetnames)
+    sheet_limit = min(total_sheets, max_sheets)
     sheets = []
-    for worksheet in workbook.worksheets:
+    if total_sheets > max_sheets:
+        sheets.append(
+            f"--- 已截断 / Truncated: processed first {sheet_limit} of {total_sheets} sheets "
+            f"(configured limit {max_sheets}) ---"
+        )
+    for worksheet in workbook.worksheets[:sheet_limit]:
         rows = []
         for row in worksheet.iter_rows(values_only=True):
             values = ["" if value is None else str(value) for value in row]
@@ -83,12 +89,15 @@ def excel_text(data: bytes, max_sheets: int) -> str:
 
 def powerpoint_text(data: bytes, max_slides: int) -> str:
     presentation = Presentation(io.BytesIO(data))
-    if len(presentation.slides) > max_slides:
-        raise ValueError(
-            f"演示文稿有 {len(presentation.slides)} 张幻灯片，超过配置上限 {max_slides} / Presentation has {len(presentation.slides)} slides; configured limit is {max_slides}."
-        )
+    total_slides = len(presentation.slides)
+    slide_limit = min(total_slides, max_slides)
     slides = []
-    for index, slide in enumerate(presentation.slides):
+    if total_slides > max_slides:
+        slides.append(
+            f"--- 已截断 / Truncated: processed first {slide_limit} of {total_slides} slides "
+            f"(configured limit {max_slides}) ---"
+        )
+    for index, slide in enumerate(list(presentation.slides)[:slide_limit]):
         parts = []
         for shape in slide.shapes:
             if hasattr(shape, "text") and shape.text.strip():
@@ -110,44 +119,51 @@ def decoded_text(data: bytes) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--filename", required=True)
-    parser.add_argument("--max-pages", type=int, required=True)
-    parser.add_argument("--dpi", type=int, required=True)
-    parser.add_argument("--native-text-min-chars", type=int, required=True)
-    parser.add_argument("--max-output-chars", type=int, required=True)
-    args = parser.parse_args()
+    try:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--filename", required=True)
+        parser.add_argument("--max-pages", type=int, required=True)
+        parser.add_argument("--dpi", type=int, required=True)
+        parser.add_argument("--native-text-min-chars", type=int, required=True)
+        parser.add_argument("--max-output-chars", type=int, required=True)
+        args = parser.parse_args()
 
-    data = sys.stdin.buffer.read()
-    suffix = Path(args.filename).suffix.lower()
-    if suffix == ".pdf":
-        kind, output = "pdf", pdf_text(data, args)
-    elif suffix in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}:
-        kind, output = "image", image_text(data)
-    elif suffix == ".docx":
-        kind, output = "word", word_text(data)
-    elif suffix in {".xlsx", ".xlsm"}:
-        kind, output = "excel", excel_text(data, args.max_pages)
-    elif suffix == ".pptx":
-        kind, output = "powerpoint", powerpoint_text(data, args.max_pages)
-    elif suffix in {".txt", ".md", ".csv", ".tsv", ".json", ".xml", ".yaml", ".yml", ".log", ".py", ".js", ".ts", ".tsx", ".css"}:
-        kind, output = "text", decoded_text(data)
-    elif suffix in {".html", ".htm"}:
-        html = TextHTMLParser()
-        html.feed(decoded_text(data))
-        kind, output = "html", "\n".join(html.parts)
-    else:
-        raise ValueError(
-            "不支持的文件类型。支持 PDF、图片、DOCX、XLSX/XLSM、PPTX 及常见文本/CSV/JSON/HTML 文件 / "
-            "Unsupported file type. Supported: PDF, images, DOCX, XLSX/XLSM, PPTX, and common text/CSV/JSON/HTML files."
-        )
+        data = sys.stdin.buffer.read()
+        if not data:
+            raise ValueError("文件为空 / File upload is empty.")
+        suffix = Path(args.filename).suffix.lower()
+        if suffix == ".pdf":
+            kind, output = "pdf", pdf_text(data, args)
+        elif suffix in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}:
+            kind, output = "image", image_text(data)
+        elif suffix == ".docx":
+            kind, output = "word", word_text(data)
+        elif suffix in {".xlsx", ".xlsm"}:
+            kind, output = "excel", excel_text(data, args.max_pages)
+        elif suffix == ".pptx":
+            kind, output = "powerpoint", powerpoint_text(data, args.max_pages)
+        elif suffix in {".txt", ".md", ".csv", ".tsv", ".json", ".xml", ".yaml", ".yml", ".log", ".py", ".js", ".ts", ".tsx", ".css"}:
+            kind, output = "text", decoded_text(data)
+        elif suffix in {".html", ".htm"}:
+            html = TextHTMLParser()
+            html.feed(decoded_text(data))
+            kind, output = "html", "\n".join(html.parts)
+        else:
+            raise ValueError(
+                "不支持的文件类型。支持 PDF、图片、DOCX、XLSX/XLSM、PPTX 及常见文本/CSV/JSON/HTML 文件 / "
+                "Unsupported file type. Supported: PDF, images, DOCX, XLSX/XLSM, PPTX, and common text/CSV/JSON/HTML files."
+            )
 
-    output = output.strip()
-    if len(output) > args.max_output_chars:
-        raise ValueError(
-            f"提取文本超过配置的 {args.max_output_chars} 字符上限 / Extracted text exceeds the configured {args.max_output_chars}-character limit."
-        )
-    print(json.dumps({"kind": kind, "text": output}, ensure_ascii=True))
+        output = output.strip()
+        if len(output) > args.max_output_chars:
+            notice = (
+                f"\n\n--- 已截断 / Truncated: output limited to {args.max_output_chars} characters ---"
+            )
+            output = output[: max(0, args.max_output_chars - len(notice))].rstrip() + notice
+        print(json.dumps({"kind": kind, "text": output}, ensure_ascii=True))
+    except Exception as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(1) from error
 
 
 if __name__ == "__main__":

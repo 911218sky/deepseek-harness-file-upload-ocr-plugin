@@ -96,6 +96,7 @@
     "lightningcss": "^1.33.0",
     "react": "^18.2.0",
     "tsdown": "^0.22.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "unrun": "^0.1.0"
   }
 }
