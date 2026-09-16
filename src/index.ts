@@ -26,12 +26,12 @@ export interface Config {
 /** Cordis configuration schema. */
 export const Config: Schema<Config> = Schema.object({
   pythonCommand: Schema.string().default('auto'),
-  maxFileBytes: Schema.natural().min(1).default(25 * 1024 * 1024),
-  maxPages: Schema.natural().min(1).default(50),
+  maxFileBytes: Schema.natural().min(1).default(100 * 1024 * 1024),
+  maxPages: Schema.natural().min(1).default(200),
   dpi: Schema.natural().min(72).max(300).default(144),
   nativeTextMinChars: Schema.natural().default(24),
-  timeoutMs: Schema.natural().min(1).default(300_000),
-  maxOutputChars: Schema.natural().min(1).default(200_000),
+  timeoutMs: Schema.natural().min(1).default(900_000),
+  maxOutputChars: Schema.natural().min(1).default(1_000_000),
 })
 
 export const name = 'file-upload-ocr'
@@ -74,7 +74,7 @@ function runExtract(data: Buffer, filename: string, config: Config): Promise<Ext
     const child = execFile(resolvePython(config.pythonCommand), args, {
       encoding: 'utf8',
       env: cleanEnvironment(),
-      maxBuffer: Math.max(64 * 1024, config.maxOutputChars * 4),
+      maxBuffer: Math.max(64 * 1024, config.maxOutputChars * 8),
       timeout: config.timeoutMs,
     }, (error, stdout, stderr) => {
       if (error !== null) {
