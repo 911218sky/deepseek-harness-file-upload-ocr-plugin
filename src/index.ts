@@ -30,7 +30,7 @@ export const Config: Schema<Config> = Schema.object({
   maxPages: Schema.natural().min(1).default(50),
   dpi: Schema.natural().min(72).max(300).default(144),
   nativeTextMinChars: Schema.natural().default(24),
-  timeoutMs: Schema.natural().min(1).default(120_000),
+  timeoutMs: Schema.natural().min(1).default(300_000),
   maxOutputChars: Schema.natural().min(1).default(200_000),
 })
 

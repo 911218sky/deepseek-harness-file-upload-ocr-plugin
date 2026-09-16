@@ -87,11 +87,22 @@ export class FileAttachmentStore {
     this.touch(sessionId)
   }
 
+  hasPending(sessionId: SessionId, id: string): boolean {
+    return this.getPending(sessionId).some(row => row.id === id)
+  }
+
   clearPending(sessionId: SessionId, id: string): void {
     const next = this.getPending(sessionId).filter(row => row.id !== id)
     if (next.length === this.getPending(sessionId).length) return
     if (next.length === 0) this.pending.delete(sessionId)
     else this.pending.set(sessionId, next)
+    this.touch(sessionId)
+  }
+
+  /** Drop in-flight extractions when the composer no longer references them. */
+  discardPending(sessionId: SessionId): void {
+    if (this.getPending(sessionId).length === 0) return
+    this.pending.delete(sessionId)
     this.touch(sessionId)
   }
 
@@ -119,8 +130,6 @@ export class FileAttachmentStore {
 
   retain(sessionId: SessionId, refs: ReadonlySet<string>): void {
     const current = this.get(sessionId)
-    // Avoid wiping ready cards when the maybe-input hook briefly reports no occurrences.
-    if (refs.size === 0 && current.length > 0) return
     const next = current.filter(file => refs.has(file.ref))
     if (next.length === current.length) return
     for (const file of current) {
