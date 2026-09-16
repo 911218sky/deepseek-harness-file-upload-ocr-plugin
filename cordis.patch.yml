@@ -3,9 +3,9 @@
       name: dsh-file-upload-ocr-plugin
       config:
         pythonCommand: !!js process.env.DSH_FILE_OCR_PYTHON ?? 'auto'
-        maxFileBytes: 26214400
-        maxPages: 50
+        maxFileBytes: 104857600
+        maxPages: 200
         dpi: 144
         nativeTextMinChars: 24
-        timeoutMs: 300000
-        maxOutputChars: 200000
+        timeoutMs: 900000
+        maxOutputChars: 1000000
