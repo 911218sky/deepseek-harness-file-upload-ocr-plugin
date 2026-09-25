@@ -128,10 +128,12 @@ cards.
 
 **Known good for current in-composer seat (re-verify after bumps):** shadow
 `conversation.input.attachments` at `priority: -10` (native typically `0`).
-Rail follows store `pending` + `ready`, not draft emptiness. Cleanup:
-`discardPending` while `phase === 'submitting'` and no OCR refs; `retain` only
-**after leaving** submitting with empty refs — never `retain`/wipe on empty
-draft while `extracting` or idle empty draft.
+Rail follows store `pending` + `ready`, not draft emptiness. Cleanup: on
+`submitting`, set a clear-after-submit flag and `retain` to current OCR refs
+(and `discardPending`). Keep retaining after leaving submit until refs are
+empty — phase can leave `submitting` before chips clear. Never
+`retain(empty)` on idle empty draft (protects attach race before the chip
+lands).
 
 ## Anti-patterns
 

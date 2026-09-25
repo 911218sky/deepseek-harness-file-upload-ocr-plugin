@@ -56,6 +56,24 @@ class FileAttachmentStore {
   }
 }
 
+/** Mirror FileAttachmentRail cleanup (phase + draft refs). */
+function syncRail(store, session, { phase, ocrRefs, clearAfterSubmit }) {
+  if (phase === 'submitting') {
+    clearAfterSubmit.current = true
+    store.discardPending(session)
+    store.retain(session, ocrRefs)
+    return
+  }
+  if (clearAfterSubmit.current) {
+    store.discardPending(session)
+    store.retain(session, ocrRefs)
+    if (ocrRefs.size === 0) clearAfterSubmit.current = false
+    return
+  }
+  if (ocrRefs.size === 0) return
+  store.retain(session, ocrRefs)
+}
+
 /** DSH 0.1.7: rail lists store rows; draft refs only drive retain/cleanup. */
 function visibleCards(ready, pending) {
   if (ready.length === 0 && pending.length === 0) return []
@@ -65,13 +83,26 @@ function visibleCards(ready, pending) {
 const store = new FileAttachmentStore()
 const session = 's1'
 const file = { ref: 'r1', name: 'a.pdf', size: 1, kind: 'pdf', text: 'x' }
+const clearAfterSubmit = { current: false }
 
 store.add(session, file)
 assert.deepEqual(visibleCards(store.get(session), store.getPending(session)), ['r1'])
 
-// After send: retain() clears store; UI hides cards.
+// After send (happy path): retain(empty) clears store; UI hides cards.
 store.retain(session, new Set())
 assert.equal(store.get(session).length, 0)
+assert.deepEqual(visibleCards(store.get(session), store.getPending(session)).length, 0)
+
+// Race: phase leaves submitting while draft refs still present, then refs clear.
+store.add(session, file)
+syncRail(store, session, { phase: 'submitting', ocrRefs: new Set(['r1']), clearAfterSubmit })
+assert.equal(store.get(session).length, 1)
+syncRail(store, session, { phase: 'idle', ocrRefs: new Set(['r1']), clearAfterSubmit })
+assert.equal(store.get(session).length, 1)
+assert.equal(clearAfterSubmit.current, true)
+syncRail(store, session, { phase: 'idle', ocrRefs: new Set(), clearAfterSubmit })
+assert.equal(store.get(session).length, 0)
+assert.equal(clearAfterSubmit.current, false)
 assert.deepEqual(visibleCards(store.get(session), store.getPending(session)).length, 0)
 
 // OCR in progress with empty text draft: pending card stays visible.

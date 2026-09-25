@@ -371,20 +371,27 @@ export function FileAttachmentRail({
     [occurrences],
   )
   const refKey = [...ocrRefs].join('\u0000')
-  const prevPhase = useRef(phase)
+  /** After send, phase may leave `submitting` before draft refs clear — keep syncing until empty. */
+  const clearAfterSubmit = useRef(false)
 
   useEffect(() => {
     if (session === undefined) return
-    const wasSubmitting = prevPhase.current === 'submitting'
-    prevPhase.current = phase
+
     if (phase === 'submitting') {
-      if (ocrRefs.size === 0) files.discardPending(session)
-      return
-    }
-    if (wasSubmitting && ocrRefs.size === 0) {
+      clearAfterSubmit.current = true
+      files.discardPending(session)
       files.retain(session, ocrRefs)
       return
     }
+
+    if (clearAfterSubmit.current) {
+      files.discardPending(session)
+      files.retain(session, ocrRefs)
+      if (ocrRefs.size === 0) clearAfterSubmit.current = false
+      return
+    }
+
+    // Idle empty: do not retain(empty) — protects attach race (store row before chip lands).
     if (ocrRefs.size === 0) return
     const timer = setTimeout(() => { files.retain(session, ocrRefs) }, 500)
     return () => clearTimeout(timer)
