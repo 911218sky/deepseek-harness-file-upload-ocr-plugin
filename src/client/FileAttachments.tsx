@@ -5,9 +5,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import {
   Button,
   FileTypeIcon,
+  IconBrowseOutlineRegular,
   IconCloseFillRegular,
   IconPaperclipOutlineRegular,
   Modal,
+  fileExtension,
   fileSizeText,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ComposerAttachmentsProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -282,10 +284,7 @@ export function FileAttachButton({
             onClick={() => { chooseImageMode('vision') }}
           >
             <span className={`${css.choiceIcon} ${css.choiceIconVision}`} aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
-                <path d="M2.5 8s2.2-3.5 5.5-3.5S13.5 8 13.5 8s-2.2 3.5-5.5 3.5S2.5 8 2.5 8Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-                <circle cx="8" cy="8" r="1.6" stroke="currentColor" strokeWidth="1.3" />
-              </svg>
+              <IconBrowseOutlineRegular size={18} />
             </span>
             <span className={css.choiceCopy}>
               <span className={css.choiceLabel}>直接提供原圖</span>
@@ -299,10 +298,7 @@ export function FileAttachButton({
             onClick={() => { chooseImageMode('ocr') }}
           >
             <span className={`${css.choiceIcon} ${css.choiceIconOcr}`} aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
-                <path d="M3.5 2.5h6l3 3v8h-9v-11Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-                <path d="M9.5 2.6v3h3M5.5 8.5h5M5.5 11h3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <FileTypeIcon path="document.pdf" />
             </span>
             <span className={css.choiceCopy}>
               <span className={css.choiceLabel}>本機 OCR 轉文字</span>
@@ -428,7 +424,12 @@ export function FileAttachmentRail({
             </span>
             <span className={css.details}>
               <span className={css.name} title={file.name}>{file.name}</span>
-              <span className={css.size}>{fileSizeText(file.size)} · {file.kind}</span>
+              <span className={css.size}>
+                {[
+                  fileExtension(file.name).toUpperCase().slice(0, 8) || file.kind.toUpperCase(),
+                  fileSizeText(file.size),
+                ].filter(Boolean).join(' · ')}
+              </span>
             </span>
             <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.ref) }}>
               <IconCloseFillRegular size={14} />
