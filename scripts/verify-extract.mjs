@@ -1,16 +1,22 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const python = join(root, '.venv/bin/python')
+const dshHome = (process.env.DSH_HOME?.trim() || join(homedir(), '.dsh'))
+const durablePython = join(
+  process.env.DSH_FILE_OCR_HOME?.trim() || join(dshHome, 'ocr-runtime'),
+  '.venv/bin/python',
+)
+const localPython = join(root, '.venv/bin/python')
+const python = [durablePython, localPython].find((path) => existsSync(path))
 const helper = join(root, 'extract.py')
 
-if (!existsSync(python)) {
-  console.error('missing .venv — run scripts/setup-ocr.sh first')
+if (python === undefined) {
+  console.error('missing OCR venv — run scripts/setup-ocr.sh first (installs under $DSH_HOME/ocr-runtime)')
   process.exit(1)
 }
 
@@ -50,8 +56,11 @@ const long = runExtract('long.txt', Buffer.from('x'.repeat(250_000)), { maxOutpu
 assert.match(long.text, /Truncated/)
 assert.ok(long.text.length <= 1000)
 
-// unsupported extension
-assert.throws(() => runExtract('legacy.doc', Buffer.from('fake')), /Unsupported file type/)
+// unsupported / legacy office — bilingual message
+assert.throws(
+  () => runExtract('legacy.doc', Buffer.from('fake')),
+  /Unsupported file type|Legacy Office format|不支持旧版 Office|不支持的文件类型/,
+)
 
 // minimal pdf via pypdfium2 if available
 try {
@@ -71,4 +80,4 @@ try {
   console.warn('pdf-lib not installed — skipping generated PDF test:', error.message)
 }
 
-console.log('extract-logic-ok')
+console.log('extract-logic-ok (python=%s)', python)

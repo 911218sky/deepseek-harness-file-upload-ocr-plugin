@@ -3,7 +3,8 @@
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { basename } from 'node:path'
+import { homedir } from 'node:os'
+import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
@@ -11,6 +12,29 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 
 const ROUTE = '/api/file-extract'
 const HELPER = fileURLToPath(new URL('../extract.py', import.meta.url))
+
+/** Match launcher default: `$DSH_HOME` or `~/.dsh`. */
+function resolveDshHome(): string {
+  const fromEnv = process.env.DSH_HOME
+  if (fromEnv !== undefined && fromEnv.trim().length > 0) return fromEnv.trim()
+  return join(homedir(), '.dsh')
+}
+
+/**
+ * Stable OCR runtime root that survives pnpm / `dsh plugin add` path churn.
+ * Override with `DSH_FILE_OCR_HOME`; default `$DSH_HOME/ocr-runtime`.
+ */
+function resolveOcrRuntimeRoot(): string {
+  const fromEnv = process.env.DSH_FILE_OCR_HOME
+  if (fromEnv !== undefined && fromEnv.trim().length > 0) return fromEnv.trim()
+  return join(resolveDshHome(), 'ocr-runtime')
+}
+
+function durablePythonPath(): string {
+  return process.platform === 'win32'
+    ? join(resolveOcrRuntimeRoot(), '.venv', 'Scripts', 'python.exe')
+    : join(resolveOcrRuntimeRoot(), '.venv', 'bin', 'python')
+}
 
 /** Deployment settings for file admission and the local extraction worker. */
 export interface Config {
@@ -46,14 +70,15 @@ function resolvePython(command: string): string {
   if (command !== 'auto') return command
   const configured = process.env.DSH_FILE_OCR_PYTHON
   if (configured !== undefined) return configured
-  const local = fileURLToPath(new URL(
-    process.platform === 'win32' ? '../.venv/Scripts/python.exe' : '../.venv/bin/python',
-    import.meta.url,
-  ))
-  if (!existsSync(local)) {
-    throw new Error('OCR 环境未安装 / OCR environment is not installed. 请运行 scripts/setup-ocr.ps1 或 scripts/setup-ocr.sh / Run scripts/setup-ocr.ps1 or scripts/setup-ocr.sh.')
-  }
-  return local
+  const durable = durablePythonPath()
+  if (existsSync(durable)) return durable
+  throw new Error(
+    'OCR 环境未安装 / OCR environment is not installed. '
+    + '请运行 scripts/setup-ocr.ps1 或 scripts/setup-ocr.sh '
+    + '(安装到 $DSH_HOME/ocr-runtime，升级插件后无需重装) / '
+    + 'Run scripts/setup-ocr.ps1 or scripts/setup-ocr.sh '
+    + '(installs under $DSH_HOME/ocr-runtime; survives plugin upgrades).',
+  )
 }
 
 function cleanEnvironment(): NodeJS.ProcessEnv {
