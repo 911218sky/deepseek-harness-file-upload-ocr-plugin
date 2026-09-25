@@ -12,7 +12,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { InputTriggerSource, ReferenceInsert } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { FILE_SOURCE, FileAttachButton, createOcrComposerAttachments } from './FileAttachments.tsx'
 import { FileAttachmentStore, type ExtractedFile } from './FileAttachmentStore.ts'
-import { SentSteeringFileMessage, SentUserFileMessage } from './SentFileMessage.tsx'
+import { createOcrSteeringChatNode, createOcrUserChatNode } from './SentFileMessage.tsx'
 
 export const inject = ['slots', 'sessions', 'conversation', 'inputTriggers']
 
@@ -79,8 +79,9 @@ export function apply(ctx: Context): void {
   }
 
   const removeFor = (sessionId: SessionId | undefined) => (ref: string) => {
-    if (sessionId === undefined) return
-    const { input } = scopedInput(sessionId)
+    const resolved = sessionId ?? files.getActiveSessionId()
+    if (resolved === undefined) return
+    const { input } = scopedInput(resolved)
     const snapshot = input.state.getSnapshot()
     const occurrence = snapshot.occurrences.find(item => item.source === FILE_SOURCE && item.ref === ref)
     if (occurrence !== undefined) {
@@ -89,7 +90,7 @@ export function apply(ctx: Context): void {
         + snapshot.draft.slice(occurrence.offset + occurrence.length),
       )
     }
-    files.remove(sessionId, ref)
+    files.remove(resolved, ref)
   }
 
   ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
@@ -98,6 +99,7 @@ export function apply(ctx: Context): void {
     order: 30,
     inject: (sessionId) => ({
       beginExtract: (browserFile: File) => files.beginExtract(sessionId, browserFile),
+      extractSignal: (id: string) => files.signalFor(id),
       failExtract: (id: string, error: string) => { files.failExtract(sessionId, id, error) },
       clearPending: (id: string) => { files.clearPending(sessionId, id) },
       hasPending: (id: string) => files.hasPending(sessionId, id),
@@ -154,14 +156,16 @@ export function apply(ctx: Context): void {
     }),
   }, OcrComposerAttachments))
 
+  const OcrUserChatNode = createOcrUserChatNode(ctx)
+  const OcrSteeringChatNode = createOcrSteeringChatNode(ctx)
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
     key: 'user',
     priority: -10,
-  }, SentUserFileMessage))
+  }, OcrUserChatNode))
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
     key: 'steering',
     priority: -10,
-  }, SentSteeringFileMessage))
+  }, OcrSteeringChatNode))
 }

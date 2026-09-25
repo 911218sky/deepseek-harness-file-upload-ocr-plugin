@@ -88,12 +88,16 @@ on `submitting`** or cards stick after normal send.
 
 **Known-good clear (this plugin):**
 
-1. On `phase === 'submitting'`: `discardPending` + `retain(session, ocrRefs)`.
-2. When OCR refs go **non-empty → empty** (`hadRefs && !hasRefs`): same retain
-   (covers plain commit-draft and user chip delete).
-3. After that clear, delay `gcPayloads()` so serialize / failed-restore can still
-   `find(ref)` briefly (like native release timing).
-4. Never `retain(empty)` on idle when refs were **never** present (attach race:
+1. Track **session-scoped** `{ session, refKey }` — switching chats must not look
+   like “chips just left” (that would kill the new session’s in-flight OCR).
+2. On `phase === 'submitting'` **or** OCR refs go non-empty → empty
+   (`hadRefs && !hasRefs`): `clearErrorPending` + `retain(session, ocrRefs)` +
+   `files.scheduleGc(1500)` (store-owned timer, not React effect cleanup).
+3. Do **not** `discardPending` on send — sibling files still extracting must
+   finish and attach to the next draft; only abort when the user removes the card.
+4. On restore (`hasRefs` again): **immediate** `retain` (no 500ms delay) so
+   failed-restore wins the race against GC.
+5. Never `retain(empty)` on idle when refs were **never** present (attach race:
    store row before chip lands).
 
 **Verify after-send:**
@@ -101,9 +105,10 @@ on `submitting`** or cards stick after normal send.
 1. Ready card visible in `[data-ocr-rail="1"]`.
 2. Send message.
 3. Assert rail gone / empty within ~1s; transcript may still show sent file card
-   (that is `SentFileMessage`, not the composer rail).
+   (OCR cards above wrapped native `UserMessageNodeView`, not the composer rail).
 
-Unit mirror: `node scripts/verify-ui-logic.mjs` (plain-send + submitting races).
+Unit mirror: `node scripts/verify-ui-logic.mjs` (plain-send, submitting, session
+switch, multi-file pending).
 
 ## Repair C (missing UI) — order
 

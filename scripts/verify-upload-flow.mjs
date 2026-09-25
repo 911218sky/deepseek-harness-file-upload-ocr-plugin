@@ -2,14 +2,31 @@
  * Simulates the Web UI upload path: File -> arrayBuffer -> POST /api/file-extract
  */
 import assert from 'node:assert/strict'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 const base = process.env.DSH_WEB_BASE ?? 'http://127.0.0.1:3080'
-const dshHome = process.env.DSH_HOME?.trim() || join(homedir(), '.config/dsh')
-const py = join(dshHome, 'ocr-runtime/.venv/bin/python')
+
+function resolveDshHome() {
+  const fromEnv = process.env.DSH_HOME?.trim()
+  if (fromEnv) return fromEnv
+  const home = homedir()
+  const candidates = [join(home, '.dsh'), join(home, '.config', 'dsh')]
+  for (const candidate of candidates) {
+    if (existsSync(join(candidate, 'ocr-runtime', '.venv'))) return candidate
+  }
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  return candidates[0]
+}
+
+const dshHome = resolveDshHome()
+const py = process.platform === 'win32'
+  ? join(dshHome, 'ocr-runtime/.venv/Scripts/python.exe')
+  : join(dshHome, 'ocr-runtime/.venv/bin/python')
 
 // Build a slightly truncated JPEG (the case users hit).
 const jpegPath = '/tmp/dsh-ui-trunc.jpg'

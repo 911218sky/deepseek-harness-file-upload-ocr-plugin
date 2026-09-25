@@ -24,11 +24,13 @@ export class FileAttachmentStore {
   private readonly sessions = new Map<SessionId, readonly ExtractedFile[]>()
   private readonly pending = new Map<SessionId, readonly PendingFile[]>()
   private readonly byRef = new Map<string, ExtractedFile>()
+  private readonly controllers = new Map<string, AbortController>()
   private readonly listeners = new Map<SessionId, Set<() => void>>()
   private readonly globalListeners = new Set<() => void>()
   /** Last session touched by extract/attach — used when `conversation.input.attachments` inject omits sessionId. */
   private activeSessionId: SessionId | undefined
   private generation = 0
+  private gcTimer: ReturnType<typeof setTimeout> | null = null
 
   getActiveSessionId(): SessionId | undefined {
     return this.activeSessionId
@@ -48,6 +50,11 @@ export class FileAttachmentStore {
 
   find(ref: string): ExtractedFile | undefined {
     return this.byRef.get(ref)
+  }
+
+  /** AbortSignal for an in-flight extract (cancelled on remove / clearPending). */
+  signalFor(id: string): AbortSignal | undefined {
+    return this.controllers.get(id)?.signal
   }
 
   subscribe(sessionId: SessionId, listener: () => void): () => void {
@@ -74,12 +81,14 @@ export class FileAttachmentStore {
       size: file.size,
       status: 'extracting',
     }
+    this.controllers.set(id, new AbortController())
     this.pending.set(sessionId, [...this.getPending(sessionId), row])
     this.touch(sessionId)
     return id
   }
 
   failExtract(sessionId: SessionId, id: string, error: string): void {
+    this.releaseController(id, false)
     const next = this.getPending(sessionId).map(row => (
       row.id === id ? { ...row, status: 'error' as const, error } : row
     ))
@@ -92,6 +101,7 @@ export class FileAttachmentStore {
   }
 
   clearPending(sessionId: SessionId, id: string): void {
+    this.releaseController(id, true)
     const next = this.getPending(sessionId).filter(row => row.id !== id)
     if (next.length === this.getPending(sessionId).length) return
     if (next.length === 0) this.pending.delete(sessionId)
@@ -99,19 +109,27 @@ export class FileAttachmentStore {
     this.touch(sessionId)
   }
 
-  /** Drop in-flight extractions when the composer no longer references them. */
-  discardPending(sessionId: SessionId): void {
-    if (this.getPending(sessionId).length === 0) return
-    this.pending.delete(sessionId)
+  /**
+   * Drop stale *error* cards only. In-flight OCR must survive send/commit so a
+   * sibling file still extracting is not silently abandoned mid-fetch.
+   */
+  clearErrorPending(sessionId: SessionId): void {
+    const current = this.getPending(sessionId)
+    const next = current.filter(row => row.status !== 'error')
+    if (next.length === current.length) return
+    if (next.length === 0) this.pending.delete(sessionId)
+    else this.pending.set(sessionId, next)
     this.touch(sessionId)
   }
 
-  /** Remove failed pending cards before a new upload batch (stale OCR errors). */
-  clearErrorPending(sessionId: SessionId): void {
-    const next = this.getPending(sessionId).filter(row => row.status !== 'error')
-    if (next.length === this.getPending(sessionId).length) return
-    if (next.length === 0) this.pending.delete(sessionId)
-    else this.pending.set(sessionId, next)
+  /**
+   * @deprecated Prefer {@link clearErrorPending} on send. Kept for tests /
+   * explicit cancel-all; aborts every in-flight extract for the session.
+   */
+  discardPending(sessionId: SessionId): void {
+    for (const row of this.getPending(sessionId)) this.releaseController(row.id, true)
+    if (this.getPending(sessionId).length === 0) return
+    this.pending.delete(sessionId)
     this.touch(sessionId)
   }
 
@@ -124,6 +142,7 @@ export class FileAttachmentStore {
   remove(sessionId: SessionId, ref: string): void {
     const pendingNext = this.getPending(sessionId).filter(row => row.id !== ref)
     if (pendingNext.length !== this.getPending(sessionId).length) {
+      this.releaseController(ref, true)
       if (pendingNext.length === 0) this.pending.delete(sessionId)
       else this.pending.set(sessionId, pendingNext)
       this.touch(sessionId)
@@ -179,7 +198,24 @@ export class FileAttachmentStore {
     if (changed) this.generation += 1
   }
 
+  /**
+   * Schedule payload GC on the store (survives React effect cleanup).
+   * Re-scheduling extends the window so failed-restore can rehydrate first.
+   */
+  scheduleGc(delayMs = 1_500): void {
+    if (this.gcTimer !== null) clearTimeout(this.gcTimer)
+    this.gcTimer = setTimeout(() => {
+      this.gcTimer = null
+      this.gcPayloads()
+    }, delayMs)
+  }
+
   clear(): void {
+    if (this.gcTimer !== null) {
+      clearTimeout(this.gcTimer)
+      this.gcTimer = null
+    }
+    for (const id of [...this.controllers.keys()]) this.releaseController(id, true)
     this.sessions.clear()
     this.pending.clear()
     this.byRef.clear()
@@ -190,6 +226,13 @@ export class FileAttachmentStore {
     }
     this.listeners.clear()
     for (const listener of this.globalListeners) listener()
+  }
+
+  private releaseController(id: string, abort: boolean): void {
+    const controller = this.controllers.get(id)
+    if (controller === undefined) return
+    this.controllers.delete(id)
+    if (abort && !controller.signal.aborted) controller.abort()
   }
 
   private touch(sessionId: SessionId): void {

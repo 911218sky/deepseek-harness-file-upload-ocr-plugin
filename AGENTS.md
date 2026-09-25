@@ -13,7 +13,7 @@ DSH changes often and sometimes heavily. **Do not rebuild composer/chat UI that 
 | `conversation.createDrafts` / `addAttachments` for vision | Re-implementing native image draft attach |
 | `@deepseek-ai/dsh-client-ui-primitives` (`FileTypeIcon`, `fileExtension`, `fileSizeText`, `writeClipboard`, icons, `Modal`) | Custom file glyphs / size / clipboard helpers; hard-coded removed icons |
 | `renderMessageImages` from chat-node props | Importing non-exported `ImageGallery` / `DropOverlay` / `FileCard` |
-| Wrap native slot occupants (e.g. shadow attachments, render native + OCR) | Fully replacing native attachments UI |
+| Wrap native slot occupants (shadow + render native + OCR cards) | Fully replacing native chat/attachments UI without wrapping |
 
 **Allowed custom surface (must stay small):** OCR extract host + store for extracted text, pending/ready rail chrome for OCR refs (until DSH exports `FileCard`), thin drop mask (DropOverlay is not exported), serialize codec that emits `<attached_file>…`. If a DSH primitive later covers any of that, delete our copy and connect to theirs.
 
@@ -25,15 +25,15 @@ On every DSH client bump: re-read how native InputBar mounts attachments / left 
 
 From **2.1.15+**, `scripts/setup-ocr.sh` / `.ps1` install the Python venv to:
 
-- `$DSH_HOME/ocr-runtime/.venv` (or `~/.dsh/ocr-runtime` when `DSH_HOME` is unset)
+- `$DSH_HOME/ocr-runtime/.venv` (when unset: prefer a home that already has OCR, else `~/.dsh`, and also probe `~/.config/dsh`)
 - Override root with `DSH_FILE_OCR_HOME`
 
 The host plugin resolves Python in this order:
 
 1. `pythonCommand` config (non-`auto`)
 2. `DSH_FILE_OCR_PYTHON`
-3. **`$DSH_HOME/ocr-runtime/.venv/...`** (durable)
-4. Package-local `../.venv` (legacy fallback)
+3. **`$DSH_HOME/ocr-runtime/.venv/...`** (durable; home resolved as above)
+4. Package-local `../.venv` (legacy fallback for older local setups)
 
 `.venv/` inside the npm/GitHub package is still **never** shipped. That used to break after every `pnpm add` / `dsh plugin add` because the package path changed. The durable home runtime **survives plugin and DSH upgrades**.
 
@@ -68,9 +68,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup-ocr.ps1
 ## Verify before telling the user it is fixed
 
 ```bash
+# Prefer an explicit DSH_HOME (this machine may use ~/.config/dsh).
 DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
+if [ ! -d "$DSH_HOME/ocr-runtime/.venv" ] && [ -d "$HOME/.config/dsh/ocr-runtime/.venv" ]; then
+  DSH_HOME="$HOME/.config/dsh"
+fi
 RUNTIME="$DSH_HOME/ocr-runtime"
-# If the user uses ~/.config/dsh, export DSH_HOME accordingly.
 
 test -x "$RUNTIME/.venv/bin/python"
 "$RUNTIME/.venv/bin/python" -c "import rapidocr_onnxruntime, pypdfium2; print('ocr-imports-ok')"

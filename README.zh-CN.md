@@ -89,13 +89,13 @@ pnpm dsh --profile web
 
 | 配置键 | 默认值 | 含义 |
 |---|---:|---|
-| `pythonCommand` | `auto` | 自动使用安装脚本创建的 `.venv`，也可填 Python 绝对路径 |
-| `maxFileBytes` | 25 MiB（26,214,400 字节） | 每个文件的大小上限 |
-| `maxPages` | 50 | PDF 页数、工作表数或幻灯片数上限 |
+| `pythonCommand` | `auto` | 自动使用 `$DSH_HOME/ocr-runtime/.venv`（或包内遗留 `.venv`），也可填 Python 绝对路径 |
+| `maxFileBytes` | 100 MiB（104,857,600 字节） | 每个文件的大小上限 |
+| `maxPages` | 200 | PDF 页数、工作表数或幻灯片数上限 |
 | `dpi` | 144 | 扫描 PDF 的渲染分辨率 |
 | `nativeTextMinChars` | 24 | PDF 原生字符达到此值时跳过 OCR |
-| `timeoutMs` | 120000 | 单文件解析超时 |
-| `maxOutputChars` | 200000 | 交给模型的最大字符数 |
+| `timeoutMs` | 900000 | 单文件解析超时 |
+| `maxOutputChars` | 1000000 | 交给模型的最大字符数 |
 
 启动前设置 `DSH_FILE_OCR_PYTHON`，可在不改 YAML 的情况下指定 Python 环境。
 

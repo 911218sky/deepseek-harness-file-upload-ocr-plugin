@@ -89,13 +89,13 @@ The bundle provides OCR defaults in `cordis.patch.yml`. Harness patches replace 
 
 | Key | Default | Meaning |
 |---|---:|---|
-| `pythonCommand` | `auto` | Uses `.venv` created by setup; may be an explicit Python path |
-| `maxFileBytes` | 25 MiB (26,214,400 bytes) | Maximum size of each uploaded file |
-| `maxPages` | 50 | PDF pages, workbook sheets, or slides |
+| `pythonCommand` | `auto` | Uses durable `$DSH_HOME/ocr-runtime/.venv` (or package-local `.venv`); may be an explicit Python path |
+| `maxFileBytes` | 100 MiB (104,857,600 bytes) | Maximum size of each uploaded file |
+| `maxPages` | 200 | PDF pages, workbook sheets, or slides |
 | `dpi` | 144 | Scanned-PDF render resolution |
 | `nativeTextMinChars` | 24 | Native PDF characters required to skip OCR |
-| `timeoutMs` | 120000 | Extraction timeout per file |
-| `maxOutputChars` | 200000 | Maximum extracted characters sent to the model |
+| `timeoutMs` | 900000 | Extraction timeout per file |
+| `maxOutputChars` | 1000000 | Maximum extracted characters sent to the model |
 
 Set `DSH_FILE_OCR_PYTHON` before startup to override the configured Python runtime without editing YAML.
 
