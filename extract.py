@@ -161,20 +161,37 @@ def excel_text(data: bytes, max_sheets: int, max_output_chars: int) -> str:
             )
 
         for worksheet in workbook.worksheets[:sheet_limit]:
-            rows = []
-            for row in worksheet.iter_rows(values_only=True):
-                values = ["" if value is None else str(value) for value in row]
-                if any(values):
-                    rows.append("\t".join(values).rstrip())
-            block = f"--- 工作表 / Sheet: {worksheet.title} ---\n" + "\n".join(rows)
-            next_len = joined_length(sheets) + len(block) + (2 if sheets else 0)
-            if next_len > max_output_chars - reserve:
+            header = f"--- 工作表 / Sheet: {worksheet.title} ---\n"
+            current_len = joined_length(sheets) + (2 if sheets else 0) + len(header)
+            if current_len > max_output_chars - reserve:
                 sheets.append(
-                    f"--- 已截断 / Truncated: stopped at sheet {worksheet.title} "
+                    f"--- 已截断 / Truncated: stopped before sheet {worksheet.title} "
                     f"due to output limit ({max_output_chars} characters) ---"
                 )
                 break
+
+            rows: list[str] = []
+            truncated_sheet = False
+            for row in worksheet.iter_rows(values_only=True):
+                values = ["" if value is None else str(value) for value in row]
+                if not any(values):
+                    continue
+                line = "\t".join(values).rstrip()
+                next_len = current_len + len(line) + (1 if rows else 0)
+                if next_len > max_output_chars - reserve:
+                    truncated_sheet = True
+                    break
+                rows.append(line)
+                current_len = next_len
+
+            block = header + "\n".join(rows)
             sheets.append(block)
+            if truncated_sheet:
+                sheets.append(
+                    f"--- 已截断 / Truncated: stopped inside sheet {worksheet.title} "
+                    f"due to output limit ({max_output_chars} characters) ---"
+                )
+                break
         return "\n\n".join(sheets)
     finally:
         workbook.close()

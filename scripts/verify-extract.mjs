@@ -6,12 +6,30 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const dshHome = (process.env.DSH_HOME?.trim() || join(homedir(), '.dsh'))
+
+function resolveDshHome() {
+  const fromEnv = process.env.DSH_HOME?.trim()
+  if (fromEnv) return fromEnv
+  const home = homedir()
+  const candidates = [join(home, '.dsh'), join(home, '.config', 'dsh')]
+  for (const candidate of candidates) {
+    if (existsSync(join(candidate, 'ocr-runtime', '.venv'))) return candidate
+  }
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  return candidates[0]
+}
+
+const dshHome = resolveDshHome()
 const durablePython = join(
   process.env.DSH_FILE_OCR_HOME?.trim() || join(dshHome, 'ocr-runtime'),
-  '.venv/bin/python',
+  process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python',
 )
-const localPython = join(root, '.venv/bin/python')
+const localPython = join(
+  root,
+  process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python',
+)
 const python = [durablePython, localPython].find((path) => existsSync(path))
 const helper = join(root, 'extract.py')
 

@@ -2,7 +2,30 @@ $ErrorActionPreference = 'Stop'
 $pluginRoot = Split-Path -Parent $PSScriptRoot
 
 # Durable runtime under Harness home — survives pnpm / dsh plugin path churn.
-$dshHome = if ($env:DSH_HOME -and $env:DSH_HOME.Trim().Length -gt 0) { $env:DSH_HOME.Trim() } else { Join-Path $HOME '.dsh' }
+if ($env:DSH_HOME -and $env:DSH_HOME.Trim().Length -gt 0) {
+  $dshHome = $env:DSH_HOME.Trim()
+} else {
+  $candidates = @(
+    (Join-Path $HOME '.dsh'),
+    (Join-Path $HOME '.config/dsh')
+  )
+  $dshHome = $null
+  foreach ($candidate in $candidates) {
+    if (Test-Path (Join-Path $candidate 'ocr-runtime/.venv')) {
+      $dshHome = $candidate
+      break
+    }
+  }
+  if (-not $dshHome) {
+    foreach ($candidate in $candidates) {
+      if (Test-Path $candidate) {
+        $dshHome = $candidate
+        break
+      }
+    }
+  }
+  if (-not $dshHome) { $dshHome = Join-Path $HOME '.dsh' }
+}
 $runtimeRoot = if ($env:DSH_FILE_OCR_HOME -and $env:DSH_FILE_OCR_HOME.Trim().Length -gt 0) {
   $env:DSH_FILE_OCR_HOME.Trim()
 } else {

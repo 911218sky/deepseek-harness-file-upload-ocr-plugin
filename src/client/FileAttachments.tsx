@@ -31,6 +31,8 @@ export interface FileAttachButtonInjected {
   attach(file: File, result: ExtractResponse): void
   attachImage?(file: File): Promise<void>
   beginExtract(file: File): string
+  /** AbortSignal for the pending extract id (cancelled when the card is removed). */
+  extractSignal(id: string): AbortSignal | undefined
   failExtract(id: string, error: string): void
   clearPending(id: string): void
   hasPending(id: string): boolean
@@ -43,11 +45,20 @@ export function formatExtractError(message: string): string {
   if (lower.includes('ocr environment is not installed') || message.includes('OCR 环境未安装')) {
     return 'OCR 環境未安裝，請執行 scripts/setup-ocr.sh / OCR runtime missing — run setup-ocr.sh'
   }
-  if (lower.includes('image file is truncated') || lower.includes('truncated')) {
+  // Match Pillow truncate phrases only — do not remap unrelated "truncated" errors.
+  if (
+    lower.includes('image file is truncated')
+    || lower.includes('truncated jpeg')
+    || lower.includes('truncated png')
+    || lower.includes('broken data stream when reading image file')
+  ) {
     return '圖片不完整或已損壞，請重新儲存或換一張圖 / Image incomplete or corrupt — re-export or try another file'
   }
-  if (lower.includes('corrupt') || lower.includes('cannot identify')) {
+  if (lower.includes('cannot identify image file') || lower.includes('image is corrupt')) {
     return '無法讀取此圖片，請改用 PNG 或重新匯出 / Unreadable image — try PNG or re-export'
+  }
+  if (lower.includes('aborted') || lower.includes('abort')) {
+    return '已取消辨識 / Extraction cancelled'
   }
   return message
 }
@@ -83,10 +94,23 @@ function DropMask({ disabled, title, desc }: { disabled: boolean; title: string;
 }
 
 /** Add common local files through the generic extraction endpoint. */
+/** True when the drag payload clearly includes a non-image file we should OCR. */
+function dragClaimsOcr(dataTransfer: DataTransfer): boolean {
+  const items = [...dataTransfer.items]
+  if (items.length === 0) return false
+  return items.some((item) => {
+    if (item.kind !== 'file') return false
+    // Empty type during drag → treat as document (PDF etc.) so we claim OCR.
+    if (item.type === '') return true
+    return !item.type.startsWith('image/')
+  })
+}
+
 export function FileAttachButton({
   attach,
   attachImage,
   beginExtract,
+  extractSignal,
   failExtract,
   clearPending,
   hasPending,
@@ -121,6 +145,7 @@ export function FileAttachButton({
           continue
         }
         const pendingId = beginExtract(file)
+        const signal = extractSignal(pendingId)
         try {
           const payload = await file.arrayBuffer()
           const response = await fetch(ENDPOINT, {
@@ -130,6 +155,7 @@ export function FileAttachButton({
               'x-dsh-file-name': encodeURIComponent(file.name),
             },
             body: payload,
+            signal,
           })
           let value: ExtractResponse | { error: string }
           try {
@@ -149,6 +175,10 @@ export function FileAttachButton({
           sawSuccess = true
           setError(null)
         } catch (reason) {
+          if (signal?.aborted || (reason instanceof DOMException && reason.name === 'AbortError')) {
+            clearPending(pendingId)
+            continue
+          }
           const message = formatExtractError(reason instanceof Error ? reason.message : String(reason))
           failExtract(pendingId, message)
           setError(message)
@@ -189,21 +219,23 @@ export function FileAttachButton({
       dragDepth.current = 0
       setDragActive(false)
     }
+    // Capture only for document/OCR drops so pure-image drags reach native
+    // bubble-phase DropOverlay / onAddFiles (ui-attachment).
     const onDragEnter = (event: globalThis.DragEvent): void => {
-      if (!hasFiles(event)) return
+      if (!hasFiles(event) || event.dataTransfer === null || !dragClaimsOcr(event.dataTransfer)) return
       event.preventDefault()
       event.stopImmediatePropagation()
       dragDepth.current += 1
       setDragActive(true)
     }
     const onDragOver = (event: globalThis.DragEvent): void => {
-      if (!hasFiles(event) || event.dataTransfer === null) return
+      if (!hasFiles(event) || event.dataTransfer === null || !dragClaimsOcr(event.dataTransfer)) return
       event.preventDefault()
       event.stopImmediatePropagation()
       event.dataTransfer.dropEffect = busyRef.current ? 'none' : 'copy'
     }
     const onDragLeave = (event: globalThis.DragEvent): void => {
-      if (!hasFiles(event)) return
+      if (!hasFiles(event) || event.dataTransfer === null || !dragClaimsOcr(event.dataTransfer)) return
       event.preventDefault()
       event.stopImmediatePropagation()
       dragDepth.current = Math.max(0, dragDepth.current - 1)
@@ -213,11 +245,22 @@ export function FileAttachButton({
       if ((event.target === document.documentElement || event.target === document.body) && leavingViewport) reset()
     }
     const onDrop = (event: globalThis.DragEvent): void => {
-      if (!hasFiles(event)) return
+      if (!hasFiles(event) || event.dataTransfer === null) return
+      const files = [...(event.dataTransfer.files ?? [])]
+      const allImages = files.length > 0 && files.every(file => file.type.startsWith('image/'))
+      // Pure image drops → native attachment intake (vision drafts).
+      if (allImages && attachImage !== undefined) {
+        reset()
+        return
+      }
+      if (!dragClaimsOcr(event.dataTransfer) && allImages) {
+        reset()
+        return
+      }
       event.preventDefault()
       event.stopImmediatePropagation()
       reset()
-      if (!busyRef.current && pendingFiles === null) upload([...(event.dataTransfer?.files ?? [])])
+      if (!busyRef.current && pendingFiles === null) upload(files)
     }
     document.addEventListener('dragenter', onDragEnter, true)
     document.addEventListener('dragover', onDragOver, true)
@@ -371,36 +414,52 @@ export function FileAttachmentRail({
     [occurrences],
   )
   const refKey = [...ocrRefs].join('\u0000')
-  const prevRefKey = useRef(refKey)
+  // Session-scoped so switching chats does not look like "chips just left".
+  const prevRail = useRef<{ session: SessionId | undefined; refKey: string }>({
+    session: undefined,
+    refKey: '',
+  })
 
   useEffect(() => {
     if (session === undefined) return
 
-    const hadRefs = prevRefKey.current !== ''
+    const prev = prevRail.current
+    const sessionChanged = prev.session !== undefined && prev.session !== session
+    const hadRefs = !sessionChanged && prev.refKey !== ''
     const hasRefs = refKey !== ''
-    prevRefKey.current = refKey
+    prevRail.current = { session, refKey }
+
+    // New session identity: sync ready rows if chips exist; never discardPending.
+    if (sessionChanged) {
+      if (hasRefs) files.retain(session, ocrRefs)
+      return
+    }
+
+    const clearReadyCards = (): void => {
+      // Keep in-flight OCR (sibling files); only drop stale error cards + ready rows.
+      files.clearErrorPending(session)
+      files.retain(session, ocrRefs)
+      files.scheduleGc(1_500)
+    }
 
     // Claimed/slash submits use `submitting`. Ordinary chat uses beginDetached and
     // stays `plain` — chips leave via commit-draft, so watch refs emptying instead.
     if (phase === 'submitting') {
-      files.discardPending(session)
-      files.retain(session, ocrRefs)
+      clearReadyCards()
       return
     }
 
     // Chips left the draft (send commit or user removed) → drop ready cards.
-    // Keep byRef until serialize / failed-restore settle; GC like releaseDraft.
+    // Keep byRef until serialize / failed-restore settle; GC on the store timer.
     if (hadRefs && !hasRefs) {
-      files.discardPending(session)
-      files.retain(session, ocrRefs)
-      const timer = setTimeout(() => { files.gcPayloads() }, 1_500)
-      return () => clearTimeout(timer)
+      clearReadyCards()
+      return
     }
 
     // Idle empty: do not retain(empty) — protects attach race (store row before chip lands).
     if (!hasRefs) return
-    const timer = setTimeout(() => { files.retain(session, ocrRefs) }, 500)
-    return () => clearTimeout(timer)
+    // Immediate retain so failed-restore wins the race against scheduleGc(1.5s).
+    files.retain(session, ocrRefs)
   }, [files, ocrRefs, phase, refKey, session])
 
   if (session === undefined || (ready.length === 0 && pending.length === 0)) return null
