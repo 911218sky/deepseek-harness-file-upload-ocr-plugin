@@ -28,12 +28,6 @@ class FileAttachmentStore {
     return this.getPending(sessionId).some(row => row.id === id)
   }
 
-  clearPending(sessionId, id) {
-    const next = this.getPending(sessionId).filter(row => row.id !== id)
-    if (next.length === 0) this.pending.delete(sessionId)
-    else this.pending.set(sessionId, next)
-  }
-
   discardPending(sessionId) {
     this.pending.delete(sessionId)
   }
@@ -56,25 +50,27 @@ class FileAttachmentStore {
   }
 }
 
-/** Mirror FileAttachmentRail cleanup (phase + draft refs). */
-function syncRail(store, session, { phase, ocrRefs, clearAfterSubmit }) {
+/** Mirror FileAttachmentRail cleanup. */
+function syncRail(store, session, { phase, refKey, prevRefKey }) {
+  const hadRefs = prevRefKey.current !== ''
+  const hasRefs = refKey !== ''
+  prevRefKey.current = refKey
+  const ocrRefs = new Set(refKey === '' ? [] : refKey.split('\u0000'))
+
   if (phase === 'submitting') {
-    clearAfterSubmit.current = true
     store.discardPending(session)
     store.retain(session, ocrRefs)
     return
   }
-  if (clearAfterSubmit.current) {
+  if (hadRefs && !hasRefs) {
     store.discardPending(session)
     store.retain(session, ocrRefs)
-    if (ocrRefs.size === 0) clearAfterSubmit.current = false
     return
   }
-  if (ocrRefs.size === 0) return
+  if (!hasRefs) return
   store.retain(session, ocrRefs)
 }
 
-/** DSH 0.1.7: rail lists store rows; draft refs only drive retain/cleanup. */
 function visibleCards(ready, pending) {
   if (ready.length === 0 && pending.length === 0) return []
   return [...pending.map(p => p.id), ...ready.map(f => f.ref)]
@@ -83,38 +79,40 @@ function visibleCards(ready, pending) {
 const store = new FileAttachmentStore()
 const session = 's1'
 const file = { ref: 'r1', name: 'a.pdf', size: 1, kind: 'pdf', text: 'x' }
-const clearAfterSubmit = { current: false }
+const prevRefKey = { current: '' }
 
 store.add(session, file)
 assert.deepEqual(visibleCards(store.get(session), store.getPending(session)), ['r1'])
 
-// After send (happy path): retain(empty) clears store; UI hides cards.
-store.retain(session, new Set())
+// Attach race: ready exists before chip — must NOT wipe.
+syncRail(store, session, { phase: 'plain', refKey: '', prevRefKey })
+assert.equal(store.get(session).length, 1)
+
+// Chip lands.
+syncRail(store, session, { phase: 'plain', refKey: 'r1', prevRefKey })
+assert.equal(store.get(session).length, 1)
+
+// Ordinary send: phase stays plain; commit-draft clears chips → hadRefs→!hasRefs.
+syncRail(store, session, { phase: 'plain', refKey: '', prevRefKey })
 assert.equal(store.get(session).length, 0)
 assert.deepEqual(visibleCards(store.get(session), store.getPending(session)).length, 0)
 
-// Race: phase leaves submitting while draft refs still present, then refs clear.
+// Claimed/slash path still clears on submitting.
 store.add(session, file)
-syncRail(store, session, { phase: 'submitting', ocrRefs: new Set(['r1']), clearAfterSubmit })
-assert.equal(store.get(session).length, 1)
-syncRail(store, session, { phase: 'idle', ocrRefs: new Set(['r1']), clearAfterSubmit })
-assert.equal(store.get(session).length, 1)
-assert.equal(clearAfterSubmit.current, true)
-syncRail(store, session, { phase: 'idle', ocrRefs: new Set(), clearAfterSubmit })
+prevRefKey.current = 'r1'
+syncRail(store, session, { phase: 'submitting', refKey: '', prevRefKey })
 assert.equal(store.get(session).length, 0)
-assert.equal(clearAfterSubmit.current, false)
-assert.deepEqual(visibleCards(store.get(session), store.getPending(session)).length, 0)
 
-// OCR in progress with empty text draft: pending card stays visible.
+// OCR in progress with empty draft: pending stays (no prior refs).
+prevRefKey.current = ''
 const pendingId = store.beginExtract(session, { name: 'scan.pdf' })
+syncRail(store, session, { phase: 'plain', refKey: '', prevRefKey })
+assert.equal(store.hasPending(session, pendingId), true)
 assert.equal(visibleCards(store.get(session), store.getPending(session)).length, 1)
 
-// User sends before OCR finishes: discard in-flight pending only.
 store.discardPending(session)
 assert.equal(store.hasPending(session, pendingId), false)
-assert.deepEqual(visibleCards(store.get(session), store.getPending(session)).length, 0)
 
-// Stale error cards cleared before retry.
 store.beginExtract(session, { name: 'bad.jpg' })
 store.failExtract = function failExtract(sessionId, id, error) {
   const next = this.getPending(sessionId).map(row => (
