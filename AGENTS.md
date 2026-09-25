@@ -19,6 +19,8 @@ DSH changes often and sometimes heavily. **Do not rebuild composer/chat UI that 
 
 On every DSH client bump: re-read how native InputBar mounts attachments / left controls / chat nodes; retarget inject + imports; delete dead dual seats. Do not “stabilize” by growing more custom UI.
 
+**Debug / maintain playbook:** `.cursor/skills/dsh-slot-ui-debug/SKILL.md` — A→B→C where-to-start, after-send clear (`plain` vs `submitting`), prefer DSH glue, verify rail clears after send.
+
 ## Critical: OCR runtime is durable under `$DSH_HOME/ocr-runtime`
 
 From **2.1.15+**, `scripts/setup-ocr.sh` / `.ps1` install the Python venv to:

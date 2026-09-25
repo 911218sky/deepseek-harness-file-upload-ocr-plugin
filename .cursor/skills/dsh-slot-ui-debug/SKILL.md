@@ -1,20 +1,46 @@
 ---
 name: dsh-slot-ui-debug
 description: >-
-  Where-to-start playbook when DeepSeek Harness Cordis slot UI is missing,
-  empty, or vanished after a DSH bump: classify A/B/C (API → store/ref →
-  presentation) with evidence, then fix only the failing layer. Use for plugin
-  cards/rails that do not show, conversation.input.* looking empty, or
-  “upload works but no UI.” Classic only-C signal: API 200 + hidden draft chip
-  but no rail. Do not use for pure CSS polish when cards already render.
+  Maintain and debug dsh-file-upload-ocr-plugin against DeepSeek Harness Cordis
+  slots: where-to-start A/B/C classification, prefer thin DSH adapters, clear
+  OCR rail after send (plain commit-draft vs submitting), abdication, and
+  post-bump retarget. Use when cards/rails are missing, stick after send, vanish
+  while extracting, API 200 but no UI, or after a DSH client bump. Do not use
+  for pure CSS polish when cards already render correctly.
 ---
 
-# DSH slot UI debug — where to start
+# DSH OCR plugin — maintain & debug
 
-Goal: learn a **navigation concept**, not a version’s icon names. Name the
-failing layer first; only then open that layer’s files.
+Goal: keep this plugin a **thin adapter** on DSH, and when UI breaks, know
+**where to start** (layer) before editing.
 
-## Pipeline (durable across DSH versions)
+## How to maintain this project (longevity)
+
+DSH changes often. Do **not** grow a parallel composer. Own only OCR domain +
+glue into current DSH seats/APIs.
+
+| Prefer (DSH) | Keep custom (small) |
+|--------------|---------------------|
+| Slots: `conversation.input.left`, `conversation.input.attachments`, `conversation.chat.node` | OCR host `/api/file-extract` + `$DSH_HOME/ocr-runtime` |
+| `inputTriggers` + hidden `\uFEFF` ref + codec → `<attached_file>` | `FileAttachmentStore` (text payloads are not native drafts) |
+| Vision: `createDrafts` / `addAttachments` | Pending/ready rail chrome until DSH exports `FileCard` |
+| Primitives: `FileTypeIcon`, `fileExtension`, `fileSizeText`, `writeClipboard`, icons, `Modal` | Thin drop mask (DropOverlay not exported) |
+| Wrap native attachments occupant | — |
+| Chat images: `renderMessageImages` from node props | Sent-message file cards for OCR text tags |
+
+**On every DSH client bump**
+
+1. Read how native InputBar mounts attachments / left controls / chat nodes.
+2. Diff `@deepseek-ai/dsh-client-ui-primitives` exports (icons rename/remove).
+3. Retarget inject + imports; delete dead dual seats (no legacy dock).
+4. Re-run A→B→C and the after-send check below.
+5. Never deep-import non-exported `FileCard` / `DropOverlay` / `ImageGallery`.
+
+**Privacy:** never commit private hosts, tokens, or user workspace paths into
+this repo / skill / commits. Use `127.0.0.1` or env vars (`DSH_WEB_URL`) in
+scripts/docs only.
+
+## Debug: where to start (A → B → C)
 
 ```
 user action → API / host          (A. Backend)
@@ -22,77 +48,25 @@ user action → API / host          (A. Backend)
            → slot component JSX   (C. Presentation)
 ```
 
-## Do these three, in order
+Repro: hard-reload → upload (plugin `<input type=file>` with OCR accept, or
+`DataTransfer` + `change`) → then classify:
 
-Repro first: hard-reload the client, trigger upload (file picker or
-`DataTransfer` + `change` on the plugin `<input type=file>`), then:
+| Layer | Pass looks like | Fail → open |
+|-------|-----------------|-------------|
+| **A** | `POST /api/file-extract` 200 + non-empty body | host `src/index.ts`, OCR runtime |
+| **B** | store row and/or hidden `\uFEFF` chip / `data-composer-chip` | `src/client/index.ts` attach, `FileAttachmentStore.ts` |
+| **C** | `[data-ocr-rail="1"]` mounted (or Fiber shows our wrapper) | `FileAttachments.tsx`, slot inject, loaded bundle |
 
-1. **A** — Network: `POST /api/...` status **and** response body non-empty?
-   Fail → fix host / OCR runtime / route. Stop.
-2. **B** — Store row and/or draft ref present?
-   - Example B signals (this plugin): label `\uFEFF` chip (CSS hides
-     `span[title=\uFEFF]`), and/or DSH `data-composer-chip`, and/or a row in
-     `FileAttachmentStore`.
-   Fail → fix `attach` / inject / reference insert. Do not touch CSS. Stop.
-3. **C** — Our rail/wrapper actually mounted?
-   - Example C signal (this plugin): DOM `[data-ocr-rail="1"]`.
-   - Or Fiber: under the attachments seat, is **our** wrapper present, or only
-     the native occupant (e.g. `ComposerAttachments`)?
-   Fail → abdication / render crash / stale bundle (next section). Stop.
+**Teaching trick:** B present + no rail ⇒ only C (abdication / crash / stale
+JS). Do not blame OCR or tweak CSS first.
 
-**Teaching trick:** B signals present + no rail ⇒ **A+B passed; only C is
-broken.** That is the usual “keeps not fixing” trap (people blame OCR or CSS).
+### Abdication (C)
 
-| Layer fails | Open | Do not open first |
-|-------------|------|-------------------|
-| A | host route, OCR/runtime, network | React / CSS |
-| B | store, attach, reference insert | layout |
-| C | slot inject, rail JSX, loaded JS | “maybe OCR broke” |
+Single slots: lowest `priority` wins. Render throw ⇒ Cordis retires the entry
+until hard reload of a fixed bundle. Prove: console throw; DOM missing
+`[data-ocr-rail="1"]`; Fiber native-only. Do **not** hunt for `[data-slot]`.
 
-After any fix, re-walk A→B→C once.
-
-## Once A fails / Once B fails
-
-**A:** Confirm body (not just HTTP 200). Check OCR env / setup scripts / host
-`src/index.ts` extract route. Restart web profile if runtime just installed.
-
-**B:** Confirm attach wrote store + draft ref. Read inject/`attach` in
-`src/client/index.ts` and store APIs in `FileAttachmentStore.ts`. Missing chip
-with API OK ⇒ insert path broken, not presentation.
-
-## Why C fails while A+B look fine (abdication)
-
-Single Cordis slots: **lowest `priority` wins**. If that occupant throws during
-render, Cordis **abdicates** (retires) it and shows the next occupant for the
-rest of that registration’s life — usually until hard reload of a fixed bundle
-(or remount/re-register). Button/API/store can still work (other entries).
-
-**Prove C (actionable):**
-
-1. Console: any render throw / undefined component from the plugin bundle?
-2. DOM: query **your** marker (read current marker from rail JSX; this plugin:
-   `[data-ocr-rail="1"]`). Missing after a successful B ⇒ C.
-3. Do **not** hunt for `[data-slot]` — DSH does not reliably emit that attribute.
-4. Fiber (optional): attachments seat shows only native name ⇒ abdicated.
-
-**Lifecycle subtype (still C):** cards flash then vanish while `extracting` →
-cleanup/retain bug, not abdication. See known-good cleanup below.
-
-## How to repair C (only after A+B pass)
-
-1. **Console** for the throw that caused abdication.
-2. **Prove loaded bundle** — `rm -rf lib && pnpm run build` (this repo:
-   `tsdown`, `clean: false`). Hard reload. Grep **browser-served** plugin JS
-   (Network URL containing the plugin id) for your fix string / `rev=`.
-3. **Static marker** — temporary dead HTML in the rail. Shows ⇒ register OK,
-   crash inside hooks/JSX. Missing ⇒ check inject/`priority` in
-   `src/client/index.ts`, or still stale JS.
-4. **Bisect render** — re-add: store subscribe → safe `useInput` → markup →
-   icons from **current** primitives exports.
-5. On bumps: diff how native InputBar mounts attachments today; do not reuse
-   prior seat names or removed icons.
-
-### Stable selector rule (any version)
+### Stable `useInput` (any version)
 
 ```ts
 // BAD — new [] every check → loop → abdicate
@@ -103,52 +77,72 @@ const input = useInput(s => s)
 const occurrences = input?.occurrences ?? EMPTY_OCCURRENCES  // module const
 ```
 
-## Version upgrades — same map, new answers
+## Debug: cards stick after send (C lifecycle)
 
-A→B→C never changes. What changes: slot/seat wiring, primitives exports,
-canonical seat (drop dead dual rails once the live seat works). Re-read native
-mount + diff primitives, then re-run the three checks.
+Native draft images clear because `attachments[]` empties / `releaseDraftAttachment`.
+OCR cards live in **our store**, driven by draft **OCR refs** — must mirror that.
 
-## Prefer DSH glue (longevity)
+**Critical DSH fact:** ordinary chat send often uses `beginDetached` and stays
+`phase === 'plain'`. Claimed/slash paths use `submitting`. **Do not clear only
+on `submitting`** or cards stick after normal send.
 
-DSH can change a lot. Fix **adapters** (which slot, which primitive, which
-native wrapper), not a second composer. Prefer official seats, `inputTriggers`,
-native `createDrafts`/`addAttachments`, and current primitives. Keep custom
-code to OCR extract + text-ref store/rail/codec. If C fails after a bump,
-first ask: “Are we still connected to the live DSH seat?” before redesigning
-cards.
+**Known-good clear (this plugin):**
 
-## This plugin’s file map (examples only)
+1. On `phase === 'submitting'`: `discardPending` + `retain(session, ocrRefs)`.
+2. When OCR refs go **non-empty → empty** (`hadRefs && !hasRefs`): same retain
+   (covers plain commit-draft and user chip delete).
+3. After that clear, delay `gcPayloads()` so serialize / failed-restore can still
+   `find(ref)` briefly (like native release timing).
+4. Never `retain(empty)` on idle when refs were **never** present (attach race:
+   store row before chip lands).
 
-| Layer | Look in |
-|-------|---------|
-| A | `src/index.ts`, OCR setup scripts / `$DSH_HOME/ocr-runtime` |
-| B | `FileAttachmentStore.ts`, attach / chip insert in `src/client/index.ts` |
-| C | slot inject in `src/client/index.ts`, rail in `FileAttachments.tsx` |
+**Verify after-send:**
 
-**Known good for current in-composer seat (re-verify after bumps):** shadow
-`conversation.input.attachments` at `priority: -10` (native typically `0`).
-Rail follows store `pending` + `ready`, not draft emptiness. Cleanup: ordinary
-chat send keeps `phase === 'plain'` (`beginDetached`) — clear ready when OCR
-draft refs go from non-empty → empty (commit-draft). Also `retain`/`discardPending`
-on `submitting` for claimed/slash. Never `retain(empty)` on idle empty when
-refs were never present (protects attach race before the chip lands).
+1. Ready card visible in `[data-ocr-rail="1"]`.
+2. Send message.
+3. Assert rail gone / empty within ~1s; transcript may still show sent file card
+   (that is `SentFileMessage`, not the composer rail).
+
+Unit mirror: `node scripts/verify-ui-logic.mjs` (plain-send + submitting races).
+
+## Repair C (missing UI) — order
+
+1. Console for throw.
+2. `rm -rf lib && pnpm run build` (`tsdown`, `clean: false`). Hard reload.
+3. Grep **browser-served** combo JS (URL containing `dsh-file-upload-ocr-plugin`)
+   for fix string (`hadRefs`, `gcPayloads`, icon name, …).
+4. Static marker in rail → then bisect hooks/JSX/primitives.
+5. Prefer current primitives over custom glyphs.
+
+## File map (this repo)
+
+| Concern | Path |
+|---------|------|
+| Host / OCR API | `src/index.ts`, `scripts/setup-ocr.*`, `$DSH_HOME/ocr-runtime` |
+| Slot register / attach / hidden chip | `src/client/index.ts` |
+| Store + retain / gc | `src/client/FileAttachmentStore.ts` |
+| Rail + clear logic | `src/client/FileAttachments.tsx` |
+| Sent projection | `src/client/SentFileMessage.tsx` |
+| Logic tests | `scripts/verify-ui-logic.mjs` |
+
+Seat example (re-verify after bumps): shadow `conversation.input.attachments` at
+`priority: -10`; wrap native at `0`.
 
 ## Anti-patterns
 
-- CSS while the rail marker is absent (skipped A→B→C)
-- Blaming OCR when a B chip/ref already exists
-- Editing `src/` without proving the string in loaded Network JS
-- Copying a prior DSH version’s icons or dock seat as the permanent answer
-- Growing a parallel composer/dock instead of retargeting DSH slots/primitives
-- Importing non-exported ui-attachment symbols (`FileCard`, `DropOverlay`, `ImageGallery`)
+- CSS while rail marker absent
+- Blaming OCR when B chip/ref exists
+- Editing `src/` without proving string in loaded Network JS
+- Clearing only on `submitting` (misses plain send)
+- `retain(empty)` wiping cards during attach-before-chip
+- Growing docks / parallel composers; importing non-exported ui-attachment UI
+- Committing private hosts, tokens, or personal paths
 
-## Minimal worked pass
+## Minimal worked passes
 
-API 200, cards missing:
+**Missing cards, API 200:** A body → B chip/store → C marker/Fiber → build →
+bisect `useInput`/icons → prove served JS.
 
-1. Hard reload → upload → body OK → **A pass**
-2. `\uFEFF` chip / store row → **B pass** → do not touch attach
-3. No `[data-ocr-rail="1"]` / Fiber native-only → **C**
-4. Console throw? → clean build → marker → bisect `useInput`/icons → prove
-   served JS → pending → ready cards
+**Cards stick after send:** note phase stays `plain` → confirm refs emptied →
+`hadRefs && !hasRefs` path + `gcPayloads` → assert `[data-ocr-rail]` gone;
+transcript card OK.
