@@ -371,28 +371,32 @@ export function FileAttachmentRail({
     [occurrences],
   )
   const refKey = [...ocrRefs].join('\u0000')
-  /** After send, phase may leave `submitting` before draft refs clear — keep syncing until empty. */
-  const clearAfterSubmit = useRef(false)
+  const prevRefKey = useRef(refKey)
 
   useEffect(() => {
     if (session === undefined) return
 
+    const hadRefs = prevRefKey.current !== ''
+    const hasRefs = refKey !== ''
+    prevRefKey.current = refKey
+
+    // Claimed/slash submits use `submitting`. Ordinary chat uses beginDetached and
+    // stays `plain` — chips leave via commit-draft, so watch refs emptying instead.
     if (phase === 'submitting') {
-      clearAfterSubmit.current = true
       files.discardPending(session)
       files.retain(session, ocrRefs)
       return
     }
 
-    if (clearAfterSubmit.current) {
+    // Chips left the draft (send commit or user removed) → drop ready cards.
+    if (hadRefs && !hasRefs) {
       files.discardPending(session)
       files.retain(session, ocrRefs)
-      if (ocrRefs.size === 0) clearAfterSubmit.current = false
       return
     }
 
     // Idle empty: do not retain(empty) — protects attach race (store row before chip lands).
-    if (ocrRefs.size === 0) return
+    if (!hasRefs) return
     const timer = setTimeout(() => { files.retain(session, ocrRefs) }, 500)
     return () => clearTimeout(timer)
   }, [files, ocrRefs, phase, refKey, session])
