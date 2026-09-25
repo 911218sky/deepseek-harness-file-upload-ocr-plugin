@@ -23,7 +23,7 @@ Supported extensions: PDF; PNG, JPEG, WebP, BMP, TIFF; DOCX; XLSX/XLSM; PPTX; TX
 
 ## One-click install
 
-Prerequisites: a working `dsh` CLI, Python 3.9+, and Git. The installer creates the `web` profile when it does not exist.
+Prerequisites: a working `dsh` CLI, **Node.js LTS (`>=20`)**, **Python 3.10+** (3.12 recommended; 3.9 is EOL), and Git. The installer creates the `web` profile when it does not exist.
 
 The installer creates the local Python environment first, then registers this package through Harness's official `dsh plugin --profile ... add` flow. No manual `cordis.yml` or `cordis.patch.yml` edits are needed.
 

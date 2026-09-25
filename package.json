@@ -1,6 +1,6 @@
 {
   "name": "dsh-file-upload-ocr-plugin",
-  "version": "2.1.13",
+  "version": "2.1.14",
   "description": "DeepSeek Harness 文件上传与本地 OCR 插件 / File upload and local OCR plugin for DeepSeek Harness: PDF, Word, Excel, PowerPoint, images, and text attachments.",
   "keywords": [
     "deepseek-harness",
@@ -98,5 +98,8 @@
     "tsdown": "^0.22.2",
     "typescript": "^6.0.3",
     "unrun": "^0.1.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
