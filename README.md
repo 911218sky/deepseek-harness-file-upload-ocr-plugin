@@ -8,7 +8,7 @@
 
 ## Features
 
-Requires DeepSeek Harness **0.1.5-rc.1+** (peer dependencies target `@deepseek-ai/*@^0.1.5-rc.1`).
+Requires DeepSeek Harness **0.1.7-rc.2+** (peer dependencies target `@deepseek-ai/*@^0.1.7-rc.2`).
 
 - Real attachment cards in the composer and sent conversation messages.
 - Drag files anywhere over the Harness window to upload them.
