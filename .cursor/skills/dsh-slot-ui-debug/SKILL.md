@@ -109,6 +109,15 @@ A→B→C never changes. What changes: slot/seat wiring, primitives exports,
 canonical seat (drop dead dual rails once the live seat works). Re-read native
 mount + diff primitives, then re-run the three checks.
 
+## Prefer DSH glue (longevity)
+
+DSH can change a lot. Fix **adapters** (which slot, which primitive, which
+native wrapper), not a second composer. Prefer official seats, `inputTriggers`,
+native `createDrafts`/`addAttachments`, and current primitives. Keep custom
+code to OCR extract + text-ref store/rail/codec. If C fails after a bump,
+first ask: “Are we still connected to the live DSH seat?” before redesigning
+cards.
+
 ## This plugin’s file map (examples only)
 
 | Layer | Look in |
@@ -130,6 +139,7 @@ draft while `extracting` or idle empty draft.
 - Blaming OCR when a B chip/ref already exists
 - Editing `src/` without proving the string in loaded Network JS
 - Copying a prior DSH version’s icons or dock seat as the permanent answer
+- Growing a parallel composer/dock instead of retargeting DSH slots/primitives
 
 ## Minimal worked pass
 

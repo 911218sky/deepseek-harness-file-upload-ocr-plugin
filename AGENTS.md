@@ -2,6 +2,22 @@
 
 These rules apply whenever you install, upgrade, sync, or debug this plugin for a DeepSeek Harness / DSH deployment.
 
+## Architecture: prefer DSH seats, keep this plugin thin
+
+DSH changes often and sometimes heavily. **Do not rebuild composer/chat UI that DSH already owns.** Own only OCR-domain logic and a thin adapter into current DSH APIs. When DSH moves, fix the **connection layer**, not a parallel product.
+
+| Prefer (DSH) | Avoid (home-grown) |
+|--------------|--------------------|
+| Official slots (`conversation.input.*`, `conversation.chat.node`) | Extra docks / parallel rails / custom composers |
+| `inputTriggers` + `ReferenceInsert` + codec | Custom send pipelines that bypass DSH draft/refs |
+| `conversation.createDrafts` / `addAttachments` for vision | Re-implementing native image draft attach |
+| `@deepseek-ai/dsh-client-ui-primitives` + attachment helpers (`DropOverlay`, etc.) | New button/modal/icon systems; hard-coded removed icons |
+| Wrap native slot occupants (e.g. shadow attachments, render native + OCR) | Fully replacing native attachments UI |
+
+**Allowed custom surface (must stay small):** OCR extract host + store for extracted text, pending/ready rail for OCR refs that are not native draft images, serialize codec that emits `<attached_file>…`. If a DSH primitive later covers any of that, delete our copy and connect to theirs.
+
+On every DSH client bump: re-read how native InputBar mounts attachments / left controls / chat nodes; retarget inject + imports; delete dead dual seats. Do not “stabilize” by growing more custom UI.
+
 ## Critical: OCR runtime is durable under `$DSH_HOME/ocr-runtime`
 
 From **2.1.15+**, `scripts/setup-ocr.sh` / `.ps1` install the Python venv to:
