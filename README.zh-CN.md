@@ -8,7 +8,7 @@
 
 ## 功能
 
-需要 DeepSeek Harness **0.1.5-rc.1+**（peer 依赖目标为 `@deepseek-ai/*@^0.1.5-rc.1`）。
+需要 DeepSeek Harness **0.1.7-rc.2+**（peer 依赖目标为 `@deepseek-ai/*@^0.1.7-rc.2`）。
 
 - 输入框上方和发送后的对话记录都使用真正的文件附件卡片。
 - 支持将文件拖到 Harness 窗口任意位置上传。
