@@ -389,10 +389,12 @@ export function FileAttachmentRail({
     }
 
     // Chips left the draft (send commit or user removed) → drop ready cards.
+    // Keep byRef until serialize / failed-restore settle; GC like releaseDraft.
     if (hadRefs && !hasRefs) {
       files.discardPending(session)
       files.retain(session, ocrRefs)
-      return
+      const timer = setTimeout(() => { files.gcPayloads() }, 1_500)
+      return () => clearTimeout(timer)
     }
 
     // Idle empty: do not retain(empty) — protects attach race (store row before chip lands).

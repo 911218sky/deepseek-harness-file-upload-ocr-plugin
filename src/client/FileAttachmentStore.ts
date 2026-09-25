@@ -137,16 +137,46 @@ export class FileAttachmentStore {
     this.touch(sessionId)
   }
 
+  /**
+   * Align visible ready rows with draft OCR refs (DSH commitSend / restoreAttachments).
+   * Does **not** drop payloads from `byRef` — ordinary send serializes chips after
+   * commit-draft clears the editor, and failed sends restore chips from the same refs.
+   */
   retain(sessionId: SessionId, refs: ReadonlySet<string>): void {
     const current = this.get(sessionId)
-    const next = current.filter(file => refs.has(file.ref))
-    if (next.length === current.length) return
+    const next: ExtractedFile[] = []
+    const seen = new Set<string>()
     for (const file of current) {
-      if (!refs.has(file.ref)) this.byRef.delete(file.ref)
+      if (!refs.has(file.ref) || seen.has(file.ref)) continue
+      next.push(file)
+      seen.add(file.ref)
     }
+    for (const ref of refs) {
+      if (seen.has(ref)) continue
+      const file = this.byRef.get(ref)
+      if (file === undefined) continue
+      next.push(file)
+      seen.add(ref)
+    }
+    if (next.length === current.length && next.every((file, index) => file.ref === current[index]?.ref)) return
     if (next.length === 0) this.sessions.delete(sessionId)
     else this.sessions.set(sessionId, next)
     this.touch(sessionId)
+  }
+
+  /** Drop payloads that are no longer shown in any session (after a successful clear settles). */
+  gcPayloads(): void {
+    const live = new Set<string>()
+    for (const rows of this.sessions.values()) {
+      for (const file of rows) live.add(file.ref)
+    }
+    let changed = false
+    for (const ref of [...this.byRef.keys()]) {
+      if (live.has(ref)) continue
+      this.byRef.delete(ref)
+      changed = true
+    }
+    if (changed) this.generation += 1
   }
 
   clear(): void {
