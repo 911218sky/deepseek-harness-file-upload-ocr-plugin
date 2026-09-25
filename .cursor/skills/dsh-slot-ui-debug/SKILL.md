@@ -140,6 +140,7 @@ draft while `extracting` or idle empty draft.
 - Editing `src/` without proving the string in loaded Network JS
 - Copying a prior DSH version’s icons or dock seat as the permanent answer
 - Growing a parallel composer/dock instead of retargeting DSH slots/primitives
+- Importing non-exported ui-attachment symbols (`FileCard`, `DropOverlay`, `ImageGallery`)
 
 ## Minimal worked pass
 

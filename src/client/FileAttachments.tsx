@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import type { ComponentType, ReactNode } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
-import { Button, IconCloseOutlineRegular, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import { DropOverlay } from '@deepseek-ai/dsh-client-ui-attachment'
+import {
+  Button,
+  FileTypeIcon,
+  IconCloseFillRegular,
+  IconPaperclipOutlineRegular,
+  Modal,
+  fileSizeText,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ComposerAttachmentsProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -54,30 +61,24 @@ export type FileAttachButtonProps = PropsRuntime<'conversation.input.left'> & Fi
 export type FileAttachmentRailProps = Pick<PropsRuntime<'conversation.input.attachments'>, 'useInput'> & FileAttachmentRailInjected
 export type OcrComposerAttachmentsProps = ComposerAttachmentsProps & FileAttachmentRailInjected
 
-export function fileKindClass(kind: string): 'pdf' | 'image' | 'word' | 'excel' | 'powerpoint' | 'text' | 'generic' {
-  switch (kind.toLowerCase()) {
-    case 'pdf': return 'pdf'
-    case 'image': return 'image'
-    case 'word': return 'word'
-    case 'excel': return 'excel'
-    case 'powerpoint': return 'powerpoint'
-    case 'text':
-    case 'html': return 'text'
-    default: return 'generic'
-  }
-}
+type ImageHandleMode = 'vision' | 'ocr'
 
-/** Neutral document glyph shared by composer and sent attachment cards. */
-export function FileIcon({ size = 16 }: { size?: number }): ReactNode {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M3.5 1.75h5.2l3.8 3.8v8.7H3.5V1.75Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-      <path d="M8.5 1.9v3.9h3.8M5.5 8h5M5.5 10.5h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+/**
+ * Thin drop invitation. DSH's DropOverlay lives inside ui-attachment's client
+ * bundle and is not a package export — keep a portal + tokens only.
+ */
+function DropMask({ disabled, title, desc }: { disabled: boolean; title: string; desc?: string }): ReactNode {
+  if (typeof document === 'undefined') return null
+  return createPortal(
+    <div className={css.dropMask} role="status">
+      <div className={css.dropWrap}>
+        <div className={css.dropTitle}>{title}</div>
+        {!disabled && desc !== undefined && <div className={css.dropDesc}>{desc}</div>}
+      </div>
+    </div>,
+    document.body,
   )
 }
-
-type ImageHandleMode = 'vision' | 'ocr'
 
 /** Add common local files through the generic extraction endpoint. */
 export function FileAttachButton({
@@ -251,16 +252,14 @@ export function FileAttachButton({
           picker.current?.click()
         }}
       >
-        <FileIcon size={16} />
+        <IconPaperclipOutlineRegular size={16} />
       </button>
       {error !== null && <span className={css.error} role="alert">{error}</span>}
       {dragActive && (
-        <DropOverlay
+        <DropMask
           disabled={busy}
-          labels={{
-            title: busy ? '正在添加文件 / Adding files' : '拖放文件以上传 / Drop files to upload',
-            desc: busy ? undefined : '支持 PDF、图片、Word、Excel、PPT 和文本文件 / PDF, images, Word, Excel, PPT, and text files',
-          }}
+          title={busy ? '正在添加文件 / Adding files' : '拖放文件以上传 / Drop files to upload'}
+          desc={busy ? undefined : '支持 PDF、图片、Word、Excel、PPT 和文本文件 / PDF, images, Word, Excel, PPT, and text files'}
         />
       )}
       <Modal
@@ -316,12 +315,6 @@ export function FileAttachButton({
   )
 }
 
-function fileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-}
-
 const EMPTY_FILES: readonly ExtractedFile[] = []
 const EMPTY_PENDING: readonly PendingFile[] = []
 const EMPTY_OCCURRENCES: readonly { source: string; ref: string }[] = []
@@ -361,12 +354,8 @@ function truncateError(message: string): string {
 /**
  * OCR file cards in `conversation.input.attachments` (DSH 0.1.7 in-composer rail).
  * Visibility follows store rows (pending + ready), matching native draft attachments
- * that remain visible even when the text draft is empty.
- */
-/**
- * OCR file cards in `conversation.input.attachments` (DSH 0.1.7 in-composer rail).
- * Visibility follows store rows (pending + ready), matching native draft attachments
- * that remain visible even when the text draft is empty.
+ * that remain visible even when the text draft is empty. Card chrome mirrors native
+ * FileCard (240×64) using exported primitives — FileCard itself is not package-exported.
  */
 export function FileAttachmentRail({
   ocrSessionId,
@@ -416,33 +405,33 @@ export function FileAttachmentRail({
             className={`${css.card} ${file.status === 'error' ? css.cardError : css.cardPending}`}
             aria-busy={file.status === 'extracting'}
           >
-            <span className={`${css.fileIcon} ${file.status === 'error' ? css.generic : css.image}`} aria-hidden="true">
-              {file.status === 'extracting' ? <Spinner /> : <FileIcon size={16} />}
+            <span className={css.fileIcon} aria-hidden="true">
+              {file.status === 'extracting' ? <Spinner /> : <FileTypeIcon path={file.name} />}
             </span>
             <span className={css.details}>
               <span className={css.name} title={file.name}>{file.name}</span>
               <span className={css.size}>
                 {file.status === 'extracting'
-                  ? `OCR 辨識中… · ${fileSize(file.size)}`
+                  ? `OCR 辨識中… · ${fileSizeText(file.size)}`
                   : truncateError(file.error ?? '辨識失敗')}
               </span>
             </span>
             <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.id) }}>
-              <IconCloseOutlineRegular size={14} />
+              <IconCloseFillRegular size={14} />
             </button>
           </div>
         ))}
         {ready.map((file: ExtractedFile) => (
           <div key={file.ref} className={css.card}>
-            <span className={`${css.fileIcon} ${css[fileKindClass(file.kind)]}`} aria-hidden="true">
-              <FileIcon size={16} />
+            <span className={css.fileIcon} aria-hidden="true">
+              <FileTypeIcon path={file.name} />
             </span>
             <span className={css.details}>
               <span className={css.name} title={file.name}>{file.name}</span>
-              <span className={css.size}>{fileSize(file.size)} · {file.kind}</span>
+              <span className={css.size}>{fileSizeText(file.size)} · {file.kind}</span>
             </span>
             <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.ref) }}>
-              <IconCloseOutlineRegular size={14} />
+              <IconCloseFillRegular size={14} />
             </button>
           </div>
         ))}
