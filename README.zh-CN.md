@@ -23,7 +23,7 @@
 
 ## 一键安装
 
-前提：已能使用 `dsh` CLI、Python 3.9+ 和 Git。如果 `web` profile 不存在，安装脚本会自动创建。
+前提：已能使用 `dsh` CLI、**Node.js LTS（`>=20`）**、**Python 3.10+**（建议 3.12；3.9 已结束维护）和 Git。如果 `web` profile 不存在，安装脚本会自动创建。
 
 安装脚本会先创建本地 Python 环境，再通过 Harness 官方的 `dsh plugin --profile ... add` 流程注册插件，无需手动修改 `cordis.yml` 或 `cordis.patch.yml`。
 
