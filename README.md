@@ -109,27 +109,26 @@ Attaching an image with **Local OCR to text**, or extracting PDF/images, returns
 
 ### Cause
 
-GitHub / `pnpm add` / `dsh plugin add` installs **do not** include `.venv/` (gitignored). Installing only the JS package, or syncing to another machine without re-running setup, triggers this error.
+GitHub / `pnpm add` / `dsh plugin add` installs **do not** ship a Python venv. From **2.1.15+**, setup installs a **durable** runtime under `$DSH_HOME/ocr-runtime` so plugin upgrades usually keep OCR working. First install on a machine, or a wiped `$DSH_HOME`, still needs setup once.
 
 ### Fix
 
-Run setup in the **installed** package directory:
+Run setup from the repo **or** the installed package (both write the same durable path):
 
 ```bash
-cd "$DSH_HOME/profiles/web/node_modules/dsh-file-upload-ocr-plugin"
 chmod +x scripts/setup-ocr.sh
 ./scripts/setup-ocr.sh
-# then restart the web profile / dsh-web
+# installs: $DSH_HOME/ocr-runtime/.venv  (default home: ~/.dsh if DSH_HOME unset)
 ```
 
-On Windows use `scripts\setup-ocr.ps1`.
+On Windows use `scripts\setup-ocr.ps1`. Override the runtime root with `DSH_FILE_OCR_HOME` if needed.
 
 ### Verify after install
 
 ```bash
-PLUGIN="$DSH_HOME/profiles/web/node_modules/dsh-file-upload-ocr-plugin"
-test -x "$PLUGIN/.venv/bin/python"
-"$PLUGIN/.venv/bin/python" -c "import rapidocr_onnxruntime, pypdfium2; print('ok')"
+RUNTIME="${DSH_FILE_OCR_HOME:-${DSH_HOME:-$HOME/.dsh}/ocr-runtime}"
+test -x "$RUNTIME/.venv/bin/python"
+"$RUNTIME/.venv/bin/python" -c "import rapidocr_onnxruntime, pypdfium2; print('ok')"
 ```
 
 Full agent-oriented checklist: [AGENTS.md](./AGENTS.md).

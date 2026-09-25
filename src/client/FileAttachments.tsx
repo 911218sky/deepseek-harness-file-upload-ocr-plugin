@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ComponentType, ReactNode } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
-import { Button, IconCloseOutline16, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconCloseOutlineRegular, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { DropOverlay } from '@deepseek-ai/dsh-client-ui-attachment'
 import type { ComposerAttachmentsProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -25,22 +25,34 @@ export interface FileAttachButtonInjected {
   failExtract(id: string, error: string): void
   clearPending(id: string): void
   hasPending(id: string): boolean
+  resetUploadErrors(): void
+}
+
+/** Map raw backend / Pillow errors to user-facing copy. */
+export function formatExtractError(message: string): string {
+  const lower = message.toLowerCase()
+  if (lower.includes('ocr environment is not installed') || message.includes('OCR 环境未安装')) {
+    return 'OCR 環境未安裝，請執行 scripts/setup-ocr.sh / OCR runtime missing — run setup-ocr.sh'
+  }
+  if (lower.includes('image file is truncated') || lower.includes('truncated')) {
+    return '圖片不完整或已損壞，請重新儲存或換一張圖 / Image incomplete or corrupt — re-export or try another file'
+  }
+  if (lower.includes('corrupt') || lower.includes('cannot identify')) {
+    return '無法讀取此圖片，請改用 PNG 或重新匯出 / Unreadable image — try PNG or re-export'
+  }
+  return message
 }
 
 export interface FileAttachmentRailInjected {
   files: FileAttachmentStore
   remove(ref: string): void
-  /**
-   * Must not be named `sessionId`: session-maybe kit/owner merges can overwrite
-   * that key with `undefined`. Inject under this alias instead.
-   */
+  /** Inject key avoids collision with slot standard `sessionId` merges (DSH 0.1.7 session-maybe). */
   ocrSessionId: SessionId | undefined
 }
 
 export type FileAttachButtonProps = PropsRuntime<'conversation.input.left'> & FileAttachButtonInjected
 export type FileAttachmentRailProps = Pick<PropsRuntime<'conversation.input.attachments'>, 'useInput'> & FileAttachmentRailInjected
 export type OcrComposerAttachmentsProps = ComposerAttachmentsProps & FileAttachmentRailInjected
-export type FileAttachmentDockProps = PropsRuntime<'conversation.input.dock'> & FileAttachmentRailInjected
 
 export function fileKindClass(kind: string): 'pdf' | 'image' | 'word' | 'excel' | 'powerpoint' | 'text' | 'generic' {
   switch (kind.toLowerCase()) {
@@ -75,6 +87,7 @@ export function FileAttachButton({
   failExtract,
   clearPending,
   hasPending,
+  resetUploadErrors,
 }: FileAttachButtonProps): ReactNode {
   const picker = useRef<HTMLInputElement | null>(null)
   const dragDepth = useRef(0)
@@ -89,26 +102,31 @@ export function FileAttachButton({
     busyRef.current = true
     setBusy(true)
     setError(null)
+    resetUploadErrors()
+    let sawSuccess = false
     try {
       const useVision = imageMode === 'vision' && attachImage !== undefined
       for (const file of selected) {
         if (file.type.startsWith('image/') && useVision) {
           try {
             await attachImage(file)
+            sawSuccess = true
+            setError(null)
           } catch (reason) {
-            setError(reason instanceof Error ? reason.message : String(reason))
+            setError(formatExtractError(reason instanceof Error ? reason.message : String(reason)))
           }
           continue
         }
         const pendingId = beginExtract(file)
         try {
+          const payload = await file.arrayBuffer()
           const response = await fetch(ENDPOINT, {
             method: 'POST',
             headers: {
               'content-type': file.type || 'application/octet-stream',
               'x-dsh-file-name': encodeURIComponent(file.name),
             },
-            body: file,
+            body: payload,
           })
           let value: ExtractResponse | { error: string }
           try {
@@ -116,17 +134,24 @@ export function FileAttachButton({
           } catch {
             throw new Error(`文件解析失败 / File parsing failed（${response.status}）`)
           }
-          if (!response.ok) throw new Error('error' in value ? value.error : `文件解析失败 / File parsing failed（${response.status}）`)
-          if (!('text' in value) || !('kind' in value)) throw new Error('文件解析响应不完整 / File parsing response is incomplete.')
+          if (!response.ok) {
+            throw new Error('error' in value ? value.error : `文件解析失败 / File parsing failed（${response.status}）`)
+          }
+          if (!('text' in value) || !('kind' in value)) {
+            throw new Error('文件解析响应不完整 / File parsing response is incomplete.')
+          }
           if (!hasPending(pendingId)) continue
           attach(file, value)
           clearPending(pendingId)
+          sawSuccess = true
+          setError(null)
         } catch (reason) {
-          const message = reason instanceof Error ? reason.message : String(reason)
+          const message = formatExtractError(reason instanceof Error ? reason.message : String(reason))
           failExtract(pendingId, message)
           setError(message)
         }
       }
+      if (sawSuccess) setError(null)
     } finally {
       busyRef.current = false
       setBusy(false)
@@ -135,6 +160,7 @@ export function FileAttachButton({
 
   const upload = (selected: File[]): void => {
     if (selected.length === 0 || busyRef.current) return
+    setError(null)
     const needsChoice = attachImage !== undefined && selected.some(file => file.type.startsWith('image/'))
     if (needsChoice) {
       setPendingFiles(selected)
@@ -220,7 +246,10 @@ export function FileAttachButton({
         aria-label="添加文件 / Add file"
         aria-busy={busy}
         title={error ?? '添加文件 / Add file'}
-        onClick={() => { picker.current?.click() }}
+        onClick={() => {
+          setError(null)
+          picker.current?.click()
+        }}
       >
         <FileIcon size={16} />
       </button>
@@ -295,159 +324,134 @@ function fileSize(bytes: number): string {
 
 const EMPTY_FILES: readonly ExtractedFile[] = []
 const EMPTY_PENDING: readonly PendingFile[] = []
+const EMPTY_OCCURRENCES: readonly { source: string; ref: string }[] = []
 
 function Spinner(): ReactNode {
   return <span className={css.spinner} aria-hidden="true" />
 }
 
-function useResolvedSessionId(ocrSessionId: SessionId | undefined, files: FileAttachmentStore): SessionId | undefined {
+function useOcrSessionId(injected: SessionId | undefined, files: FileAttachmentStore): SessionId | undefined {
   const active = useSyncExternalStore(
     listener => files.subscribeGlobal(listener),
     () => files.getActiveSessionId(),
   )
-  return ocrSessionId ?? active
+  return injected ?? active
+}
+
+function useSessionStoreSlice(
+  files: FileAttachmentStore,
+  session: SessionId | undefined,
+): { ready: readonly ExtractedFile[]; pending: readonly PendingFile[] } {
+  const ready = useSyncExternalStore(
+    listener => (session !== undefined ? files.subscribe(session, listener) : () => {}),
+    () => (session !== undefined ? files.get(session) : EMPTY_FILES),
+  )
+  const pending = useSyncExternalStore(
+    listener => (session !== undefined ? files.subscribe(session, listener) : () => {}),
+    () => (session !== undefined ? files.getPending(session) : EMPTY_PENDING),
+  )
+  return { ready, pending }
 }
 
 function truncateError(message: string): string {
-  const first = message.split('\n')[0] ?? message
-  return first.length > 80 ? `${first.slice(0, 77)}…` : first
+  const formatted = formatExtractError((message.split('\n')[0] ?? message).trim())
+  return formatted.length > 120 ? `${formatted.slice(0, 117)}…` : formatted
 }
 
-function AttachmentCards({
+/**
+ * OCR file cards in `conversation.input.attachments` (DSH 0.1.7 in-composer rail).
+ * Visibility follows store rows (pending + ready), matching native draft attachments
+ * that remain visible even when the text draft is empty.
+ */
+/**
+ * OCR file cards in `conversation.input.attachments` (DSH 0.1.7 in-composer rail).
+ * Visibility follows store rows (pending + ready), matching native draft attachments
+ * that remain visible even when the text draft is empty.
+ */
+export function FileAttachmentRail({
   ocrSessionId,
   useInput,
   files,
   remove,
-  layout,
-}: FileAttachmentRailInjected & {
-  useInput: FileAttachmentRailProps['useInput']
-  layout: 'composer' | 'dock'
-}): ReactNode {
-  const session = useResolvedSessionId(ocrSessionId, files)
-  const occurrences = useInput(state => state?.occurrences ?? [])
-  const draft = useInput(state => state?.draft ?? '')
-  const phase = useInput(state => state?.phase)
-  const generation = useSyncExternalStore(
-    listener => files.subscribeGlobal(listener),
-    () => files.getGeneration(),
-  )
-  void generation
-  const [composerRailLive, setComposerRailLive] = useState(false)
-  useEffect(() => {
-    if (layout !== 'dock' || typeof document === 'undefined') return
-    const sync = (): void => {
-      setComposerRailLive(document.querySelector('[data-ocr-layout="composer"]') !== null)
-    }
-    sync()
-    const observer = new MutationObserver(sync)
-    observer.observe(document.body, { childList: true, subtree: true })
-    return () => observer.disconnect()
-  }, [layout, generation])
-
-  const ready = session === undefined ? EMPTY_FILES : files.get(session)
-  const pending = session === undefined ? EMPTY_PENDING : files.getPending(session)
-  const activeRefs = useMemo(
+}: FileAttachmentRailProps): ReactNode {
+  const session = useOcrSessionId(ocrSessionId, files)
+  const { ready, pending } = useSessionStoreSlice(files, session)
+  // One snapshot subscribe (same pattern as InputBar). Selecting `occurrences`
+  // alone with `?? []` reallocates and abdicates the slot under DSH 0.1.7.
+  const input = useInput(state => state)
+  const phase = input?.phase
+  const occurrences = input?.occurrences ?? EMPTY_OCCURRENCES
+  const ocrRefs = useMemo(
     () => new Set(occurrences.filter(item => item.source === FILE_SOURCE).map(item => item.ref)),
     [occurrences],
   )
-  const active = session === undefined
-    ? EMPTY_FILES
-    : ready.filter(file => activeRefs.has(file.ref))
-  const refKey = [...activeRefs].join('\u0000')
-  const draftEmpty = draft.trim().length === 0
+  const refKey = [...ocrRefs].join('\u0000')
+  const prevPhase = useRef(phase)
 
   useEffect(() => {
     if (session === undefined) return
-    // Message sent without waiting for OCR: cancel in-flight cards so they do not reappear.
-    if (phase === 'submitting' && activeRefs.size === 0) files.discardPending(session)
-    if (phase === 'submitting') return
-    // After send the draft clears before occurrences settle; drop orphaned store rows once stable.
-    const delay = activeRefs.size === 0 && draftEmpty ? 250 : 1_000
-    const timer = setTimeout(() => {
-      files.retain(session, activeRefs)
-      if (activeRefs.size === 0 && draftEmpty) files.discardPending(session)
-    }, delay)
+    const wasSubmitting = prevPhase.current === 'submitting'
+    prevPhase.current = phase
+    if (phase === 'submitting') {
+      if (ocrRefs.size === 0) files.discardPending(session)
+      return
+    }
+    if (wasSubmitting && ocrRefs.size === 0) {
+      files.retain(session, ocrRefs)
+      return
+    }
+    if (ocrRefs.size === 0) return
+    const timer = setTimeout(() => { files.retain(session, ocrRefs) }, 500)
     return () => clearTimeout(timer)
-  }, [activeRefs, draftEmpty, files, phase, refKey, session])
+  }, [files, ocrRefs, phase, refKey, session])
 
-  if (layout === 'dock' && composerRailLive) return null
-  if (session === undefined || (active.length === 0 && pending.length === 0)) return null
-  const body = (
-    <div className={css.rail} data-ocr-rail="1">
-      {pending.map((file: PendingFile) => (
-        <div
-          key={file.id}
-          className={`${css.card} ${file.status === 'error' ? css.cardError : css.cardPending}`}
-          aria-busy={file.status === 'extracting'}
-        >
-          <span className={`${css.fileIcon} ${file.status === 'error' ? css.generic : css.image}`} aria-hidden="true">
-            {file.status === 'extracting' ? <Spinner /> : <FileIcon size={16} />}
-          </span>
-          <span className={css.details}>
-            <span className={css.name} title={file.name}>{file.name}</span>
-            <span className={css.size}>
-              {file.status === 'extracting'
-                ? `OCR 辨識中… · ${fileSize(file.size)}`
-                : truncateError(file.error ?? '辨識失敗')}
+  if (session === undefined || (ready.length === 0 && pending.length === 0)) return null
+
+  return (
+    <div className={css.composerRail} data-ocr-rail="1" aria-label="已添加的文件 / Added files">
+      <div className={css.rail}>
+        {pending.map((file: PendingFile) => (
+          <div
+            key={file.id}
+            className={`${css.card} ${file.status === 'error' ? css.cardError : css.cardPending}`}
+            aria-busy={file.status === 'extracting'}
+          >
+            <span className={`${css.fileIcon} ${file.status === 'error' ? css.generic : css.image}`} aria-hidden="true">
+              {file.status === 'extracting' ? <Spinner /> : <FileIcon size={16} />}
             </span>
-          </span>
-          <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.id) }}>
-            <IconCloseOutline16 size={14} />
-          </button>
-        </div>
-      ))}
-      {active.map((file: ExtractedFile) => (
-        <div key={file.ref} className={css.card}>
-          <span className={`${css.fileIcon} ${css[fileKindClass(file.kind)]}`} aria-hidden="true">
-            <FileIcon size={16} />
-          </span>
-          <span className={css.details}>
-            <span className={css.name} title={file.name}>{file.name}</span>
-            <span className={css.size}>{fileSize(file.size)} · {file.kind}</span>
-          </span>
-          <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.ref) }}>
-            <IconCloseOutline16 size={14} />
-          </button>
-        </div>
-      ))}
-    </div>
-  )
-  if (layout === 'dock') {
-    return (
-      <div className={css.dock} data-ocr-layout="dock" aria-label="已添加的文件 / Added files">
-        {body}
+            <span className={css.details}>
+              <span className={css.name} title={file.name}>{file.name}</span>
+              <span className={css.size}>
+                {file.status === 'extracting'
+                  ? `OCR 辨識中… · ${fileSize(file.size)}`
+                  : truncateError(file.error ?? '辨識失敗')}
+              </span>
+            </span>
+            <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.id) }}>
+              <IconCloseOutlineRegular size={14} />
+            </button>
+          </div>
+        ))}
+        {ready.map((file: ExtractedFile) => (
+          <div key={file.ref} className={css.card}>
+            <span className={`${css.fileIcon} ${css[fileKindClass(file.kind)]}`} aria-hidden="true">
+              <FileIcon size={16} />
+            </span>
+            <span className={css.details}>
+              <span className={css.name} title={file.name}>{file.name}</span>
+              <span className={css.size}>{fileSize(file.size)} · {file.kind}</span>
+            </span>
+            <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.ref) }}>
+              <IconCloseOutlineRegular size={14} />
+            </button>
+          </div>
+        ))}
       </div>
-    )
-  }
-  return (
-    <div className={css.composerRail} data-ocr-layout="composer" aria-label="已添加的文件 / Added files">
-      {body}
     </div>
   )
 }
 
-/** OCR/file cards styled like native FileCard, rendered inside the composer. */
-export function FileAttachmentRail(props: FileAttachmentRailProps): ReactNode {
-  return <AttachmentCards {...props} layout="composer" />
-}
-
-/** Same cards above the composer — reliable fallback when attachments shadow fails. */
-export function FileAttachmentDock(props: FileAttachmentDockProps): ReactNode {
-  return (
-    <AttachmentCards
-      useInput={props.useInput as FileAttachmentRailProps['useInput']}
-      files={props.files}
-      remove={props.remove}
-      ocrSessionId={props.ocrSessionId}
-      layout="dock"
-    />
-  )
-}
-
-/**
- * Wrap native ComposerAttachments (images) and append OCR FileCards in the same
- * in-composer attachments seat. Resolves the shadowed native entry at render time.
- */
+/** Compose native image/file attachments with OCR cards (DSH 0.1.7 `conversation.input.attachments`). */
 export function createOcrComposerAttachments(ctx: Context): ComponentType<OcrComposerAttachmentsProps> {
   function OcrComposerAttachments({
     files,

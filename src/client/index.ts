@@ -10,7 +10,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { InputTriggerSource, ReferenceInsert } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { FILE_SOURCE, FileAttachButton, FileAttachmentDock, createOcrComposerAttachments } from './FileAttachments.tsx'
+import { FILE_SOURCE, FileAttachButton, createOcrComposerAttachments } from './FileAttachments.tsx'
 import { FileAttachmentStore, type ExtractedFile } from './FileAttachmentStore.ts'
 import { SentSteeringFileMessage, SentUserFileMessage } from './SentFileMessage.tsx'
 
@@ -101,6 +101,7 @@ export function apply(ctx: Context): void {
       failExtract: (id: string, error: string) => { files.failExtract(sessionId, id, error) },
       clearPending: (id: string) => { files.clearPending(sessionId, id) },
       hasPending: (id: string) => files.hasPending(sessionId, id),
+      resetUploadErrors: () => { files.clearErrorPending(sessionId) },
       attach: (browserFile: File, result: { kind: string; text: string }) => {
         const { actx, input } = scopedInput(sessionId)
         const snapshot = input.state.getSnapshot()
@@ -141,8 +142,6 @@ export function apply(ctx: Context): void {
     }),
   }, FileAttachButton))
 
-  // Inside composer: shadow native attachments. Use ocrSessionId (not sessionId) so
-  // session-maybe kit/owner merges cannot wipe the inject identity.
   const OcrComposerAttachments = createOcrComposerAttachments(ctx)
   ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
     name: 'conversation.input.attachments',
@@ -154,18 +153,6 @@ export function apply(ctx: Context): void {
       remove: removeFor(sessionId),
     }),
   }, OcrComposerAttachments))
-
-  // Backup dock (strict session). Hidden automatically when the in-composer rail mounts.
-  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
-    name: 'conversation.input.dock',
-    id: 'file-attachments',
-    order: 5,
-    inject: (sessionId: SessionId) => ({
-      files,
-      ocrSessionId: sessionId,
-      remove: removeFor(sessionId),
-    }),
-  }, FileAttachmentDock))
 
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',

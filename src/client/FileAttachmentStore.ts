@@ -26,7 +26,7 @@ export class FileAttachmentStore {
   private readonly byRef = new Map<string, ExtractedFile>()
   private readonly listeners = new Map<SessionId, Set<() => void>>()
   private readonly globalListeners = new Set<() => void>()
-  /** Last session that began/finished an extract — fallback when slot props omit sessionId. */
+  /** Last session touched by extract/attach — used when `conversation.input.attachments` inject omits sessionId. */
   private activeSessionId: SessionId | undefined
   private generation = 0
 
@@ -103,6 +103,15 @@ export class FileAttachmentStore {
   discardPending(sessionId: SessionId): void {
     if (this.getPending(sessionId).length === 0) return
     this.pending.delete(sessionId)
+    this.touch(sessionId)
+  }
+
+  /** Remove failed pending cards before a new upload batch (stale OCR errors). */
+  clearErrorPending(sessionId: SessionId): void {
+    const next = this.getPending(sessionId).filter(row => row.status !== 'error')
+    if (next.length === this.getPending(sessionId).length) return
+    if (next.length === 0) this.pending.delete(sessionId)
+    else this.pending.set(sessionId, next)
     this.touch(sessionId)
   }
 

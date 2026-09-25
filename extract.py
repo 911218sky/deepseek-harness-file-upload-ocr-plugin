@@ -11,8 +11,13 @@ from pathlib import Path
 import pypdfium2 as pdfium
 from docx import Document
 from openpyxl import load_workbook
+from PIL import Image, ImageFile, UnidentifiedImageError
 from pptx import Presentation
 from rapidocr_onnxruntime import RapidOCR
+
+# Mobile screenshots / progressive JPEGs / slightly truncated uploads often trip
+# Pillow's strict decoder ("image file is truncated (N bytes not processed)").
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 class TextHTMLParser(HTMLParser):
@@ -99,8 +104,36 @@ def pdf_text(data: bytes, args: argparse.Namespace) -> str:
     return "\n\n".join(pages)
 
 
+def normalize_image_bytes(data: bytes) -> bytes:
+    """Load image bytes tolerantly and re-encode as RGB PNG for OCR."""
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            image.load()
+            rgb = image.convert("RGB")
+            try:
+                encoded = io.BytesIO()
+                rgb.save(encoded, format="PNG")
+                return encoded.getvalue()
+            finally:
+                rgb.close()
+    except UnidentifiedImageError as error:
+        raise ValueError(
+            "无法识别的图片文件，请改用 PNG / JPEG / WebP / BMP / TIFF / "
+            "Unrecognized image file. Please use PNG, JPEG, WebP, BMP, or TIFF."
+        ) from error
+    except OSError as error:
+        message = str(error)
+        if "truncated" in message.lower() or "cannot identify" in message.lower():
+            raise ValueError(
+                "图片已损坏或不完整，请重新导出或换一张图后再试 / "
+                "Image is corrupt or incomplete. Re-export or try another file."
+            ) from error
+        raise ValueError(f"图片无法打开 / Cannot open image: {message}") from error
+
+
 def image_text(data: bytes) -> str:
-    result, _ = RapidOCR()(data)
+    # Normalize first so truncated JPEGs and exotic modes still OCR.
+    result, _ = RapidOCR()(normalize_image_bytes(data))
     return "\n".join(item[1] for item in (result or []))
 
 

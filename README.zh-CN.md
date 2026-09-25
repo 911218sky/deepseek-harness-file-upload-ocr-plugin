@@ -109,27 +109,26 @@ pnpm dsh --profile web
 
 ### 原因
 
-从 GitHub / `pnpm add` / `dsh plugin add` 安装时，**不会**带上 `.venv/`（已在 `.gitignore`）。只装 JS 包、不同步 OCR 运行时，就会报这个错。换机器或 `pnpm update` 后也要重新建环境。
+从 GitHub / `pnpm add` / `dsh plugin add` 安装时，**不会**附带 Python 环境。自 **2.1.15** 起，安装脚本会把 OCR 装到 **`$DSH_HOME/ocr-runtime`**（持久目录），升级插件后通常不用重装。首次安装或清空 `$DSH_HOME` 后仍需跑一次 setup。
 
 ### 解决
 
-在**已安装的插件目录**执行（不是只在 clone 的源码目录做一次就完事）：
+在源码仓库或已安装插件目录执行均可（都会写到同一持久路径）：
 
 ```bash
-cd "$DSH_HOME/profiles/web/node_modules/dsh-file-upload-ocr-plugin"
 chmod +x scripts/setup-ocr.sh
 ./scripts/setup-ocr.sh
-# 然后重启 web profile / dsh-web
+# 安装到：$DSH_HOME/ocr-runtime/.venv（未设置 DSH_HOME 时默认 ~/.dsh）
 ```
 
-Windows 使用 `scripts\setup-ocr.ps1`。
+Windows 使用 `scripts\setup-ocr.ps1`。可用 `DSH_FILE_OCR_HOME` 覆盖运行时根目录。
 
 ### 安装后确认
 
 ```bash
-PLUGIN="$DSH_HOME/profiles/web/node_modules/dsh-file-upload-ocr-plugin"
-test -x "$PLUGIN/.venv/bin/python"
-"$PLUGIN/.venv/bin/python" -c "import rapidocr_onnxruntime, pypdfium2; print('ok')"
+RUNTIME="${DSH_FILE_OCR_HOME:-${DSH_HOME:-$HOME/.dsh}/ocr-runtime}"
+test -x "$RUNTIME/.venv/bin/python"
+"$RUNTIME/.venv/bin/python" -c "import rapidocr_onnxruntime, pypdfium2; print('ok')"
 ```
 
 给 AI / Agent 的完整排错清单见 [AGENTS.md](./AGENTS.md)。
