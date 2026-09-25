@@ -1,7 +1,7 @@
 import { memo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
-import { FileTypeIcon, fileExtension, fileSizeText } from '@deepseek-ai/dsh-client-ui-primitives'
+import { FileTypeIcon, fileExtension, fileSizeText, writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { RenderMessageImages } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './SentFileMessage.module.css'
@@ -47,7 +47,8 @@ function CopyButton({ text }: { text: string }): ReactNode {
       type="button"
       className={css.copy}
       onClick={() => {
-        void navigator.clipboard.writeText(text).then(() => {
+        void writeClipboard(text).then((ok) => {
+          if (!ok) return
           setCopied(true)
           window.setTimeout(() => { setCopied(false) }, 1_200)
         })

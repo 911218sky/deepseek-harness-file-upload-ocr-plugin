@@ -11,7 +11,7 @@ DSH changes often and sometimes heavily. **Do not rebuild composer/chat UI that 
 | Official slots (`conversation.input.*`, `conversation.chat.node`) | Extra docks / parallel rails / custom composers |
 | `inputTriggers` + `ReferenceInsert` + codec | Custom send pipelines that bypass DSH draft/refs |
 | `conversation.createDrafts` / `addAttachments` for vision | Re-implementing native image draft attach |
-| `@deepseek-ai/dsh-client-ui-primitives` (`FileTypeIcon`, `fileSizeText`, icons, `Modal`) | Custom file glyphs / size formatters; hard-coded removed icons |
+| `@deepseek-ai/dsh-client-ui-primitives` (`FileTypeIcon`, `fileExtension`, `fileSizeText`, `writeClipboard`, icons, `Modal`) | Custom file glyphs / size / clipboard helpers; hard-coded removed icons |
 | `renderMessageImages` from chat-node props | Importing non-exported `ImageGallery` / `DropOverlay` / `FileCard` |
 | Wrap native slot occupants (e.g. shadow attachments, render native + OCR) | Fully replacing native attachments UI |
 
