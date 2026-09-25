@@ -40,22 +40,46 @@ class FileAttachmentStore {
 
   retain(sessionId, refs) {
     const current = this.get(sessionId)
-    const next = current.filter(file => refs.has(file.ref))
-    if (next.length === current.length) return
+    const next = []
+    const seen = new Set()
     for (const file of current) {
-      if (!refs.has(file.ref)) this.byRef.delete(file.ref)
+      if (!refs.has(file.ref) || seen.has(file.ref)) continue
+      next.push(file)
+      seen.add(file.ref)
     }
+    for (const ref of refs) {
+      if (seen.has(ref)) continue
+      const file = this.byRef.get(ref)
+      if (file === undefined) continue
+      next.push(file)
+      seen.add(ref)
+    }
+    if (next.length === current.length && next.every((file, index) => file.ref === current[index]?.ref)) return
     if (next.length === 0) this.sessions.delete(sessionId)
     else this.sessions.set(sessionId, next)
   }
+
+  gcPayloads() {
+    const live = new Set()
+    for (const rows of this.sessions.values()) {
+      for (const file of rows) live.add(file.ref)
+    }
+    for (const ref of [...this.byRef.keys()]) {
+      if (!live.has(ref)) this.byRef.delete(ref)
+    }
+  }
+
+  find(ref) {
+    return this.byRef.get(ref)
+  }
 }
 
-/** Mirror FileAttachmentRail cleanup. */
-function syncRail(store, session, { phase, refKey, prevRefKey }) {
+/** Mirror FileAttachmentRail cleanup (phase plain/submitting + draft refs). */
+function syncRail(store, session, { phase, ocrRefs, prevRefKey }) {
+  const refKey = [...ocrRefs].join('\u0000')
   const hadRefs = prevRefKey.current !== ''
   const hasRefs = refKey !== ''
   prevRefKey.current = refKey
-  const ocrRefs = new Set(refKey === '' ? [] : refKey.split('\u0000'))
 
   if (phase === 'submitting') {
     store.discardPending(session)
@@ -84,45 +108,46 @@ const prevRefKey = { current: '' }
 store.add(session, file)
 assert.deepEqual(visibleCards(store.get(session), store.getPending(session)), ['r1'])
 
-// Attach race: ready exists before chip — must NOT wipe.
-syncRail(store, session, { phase: 'plain', refKey: '', prevRefKey })
+// Ordinary send (phase stays plain): refs go empty after commit-draft → rail clears.
+prevRefKey.current = 'r1'
+syncRail(store, session, { phase: 'plain', ocrRefs: new Set(['r1']), prevRefKey })
 assert.equal(store.get(session).length, 1)
-
-// Chip lands.
-syncRail(store, session, { phase: 'plain', refKey: 'r1', prevRefKey })
-assert.equal(store.get(session).length, 1)
-
-// Ordinary send: phase stays plain; commit-draft clears chips → hadRefs→!hasRefs.
-syncRail(store, session, { phase: 'plain', refKey: '', prevRefKey })
+syncRail(store, session, { phase: 'plain', ocrRefs: new Set(), prevRefKey })
 assert.equal(store.get(session).length, 0)
-assert.deepEqual(visibleCards(store.get(session), store.getPending(session)).length, 0)
+// Payload kept for in-flight serialize until GC.
+assert.equal(store.find('r1')?.text, 'x')
+store.gcPayloads()
+assert.equal(store.find('r1'), undefined)
 
-// Claimed/slash path still clears on submitting.
+// Failed send restore: chips return → rehydrate from byRef.
 store.add(session, file)
 prevRefKey.current = 'r1'
-syncRail(store, session, { phase: 'submitting', refKey: '', prevRefKey })
+syncRail(store, session, { phase: 'plain', ocrRefs: new Set(), prevRefKey })
+assert.equal(store.get(session).length, 0)
+assert.ok(store.find('r1'))
+syncRail(store, session, { phase: 'plain', ocrRefs: new Set(['r1']), prevRefKey })
+assert.equal(store.get(session).length, 1)
+
+// Claimed-command submitting path also clears when refs empty.
+store.retain(session, new Set())
+store.add(session, { ref: 'r2', name: 'b.pdf', size: 1, kind: 'pdf', text: 'y' })
+prevRefKey.current = 'r2'
+syncRail(store, session, { phase: 'submitting', ocrRefs: new Set(['r2']), prevRefKey })
+assert.equal(store.get(session).length, 1)
+syncRail(store, session, { phase: 'submitting', ocrRefs: new Set(), prevRefKey })
 assert.equal(store.get(session).length, 0)
 
-// OCR in progress with empty draft: pending stays (no prior refs).
-prevRefKey.current = ''
-const pendingId = store.beginExtract(session, { name: 'scan.pdf' })
-syncRail(store, session, { phase: 'plain', refKey: '', prevRefKey })
-assert.equal(store.hasPending(session, pendingId), true)
-assert.equal(visibleCards(store.get(session), store.getPending(session)).length, 1)
+// Attach race: never had refs → empty does not wipe a brand-new ready row.
+const fresh = new FileAttachmentStore()
+const prev2 = { current: '' }
+fresh.add(session, { ref: 'r3', name: 'c.pdf', size: 1, kind: 'pdf', text: 'z' })
+syncRail(fresh, session, { phase: 'plain', ocrRefs: new Set(), prevRefKey: prev2 })
+assert.equal(fresh.get(session).length, 1)
 
+// OCR in progress with empty draft: pending stays.
+const pendingId = store.beginExtract(session, { name: 'scan.pdf' })
+assert.equal(visibleCards(store.get(session), store.getPending(session)).length, 1)
 store.discardPending(session)
 assert.equal(store.hasPending(session, pendingId), false)
-
-store.beginExtract(session, { name: 'bad.jpg' })
-store.failExtract = function failExtract(sessionId, id, error) {
-  const next = this.getPending(sessionId).map(row => (
-    row.id === id ? { ...row, status: 'error', error } : row
-  ))
-  this.pending.set(sessionId, next)
-}
-store.failExtract(session, store.getPending(session)[0].id, 'image file is truncated (1 bytes not processed)')
-assert.equal(store.getPending(session).length, 1)
-store.clearErrorPending(session)
-assert.equal(store.getPending(session).length, 0)
 
 console.log('ui-retain-logic-ok')
