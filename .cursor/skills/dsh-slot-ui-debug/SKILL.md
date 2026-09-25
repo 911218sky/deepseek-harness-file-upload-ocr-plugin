@@ -1,144 +1,142 @@
 ---
 name: dsh-slot-ui-debug
 description: >-
-  Guides evidence-first debugging for DeepSeek Harness Cordis slot UI that
-  mounts but shows nothing (abdication, stale client build, unstable useInput
-  selectors, post-upgrade API breaks). Use when plugin cards/rails vanish while
-  API returns 200, conversation.input.* slots stay empty, or UI disappears after
-  a DSH bump. Do not use for pure CSS polish when cards already render, or when
-  the API itself fails.
+  Where-to-start playbook when DeepSeek Harness Cordis slot UI is missing,
+  empty, or vanished after a DSH bump: classify A/B/C (API → store/ref →
+  presentation) with evidence, then fix only the failing layer. Use for plugin
+  cards/rails that do not show, conversation.input.* looking empty, or
+  “upload works but no UI.” Classic only-C signal: API 200 + hidden draft chip
+  but no rail. Do not use for pure CSS polish when cards already render.
 ---
 
-# DSH slot UI debug — method
+# DSH slot UI debug — where to start
 
-When a Cordis client plugin “works” (button, fetch, store) but the user sees no
-UI, **classify the failing layer** before changing CSS or rewriting features.
+Goal: learn a **navigation concept**, not a version’s icon names. Name the
+failing layer first; only then open that layer’s files.
 
-## Core technique
+## Pipeline (durable across DSH versions)
 
-Answer three questions with evidence:
-
-| Layer | Question | Pass looks like |
-|-------|----------|-----------------|
-| **A. Backend** | Did the API succeed? | `POST /api/...` 200 + non-empty body |
-| **B. Model/store** | Did attach write state + draft ref? | store row, `\uFEFF` chip, or `data-composer-chip` |
-| **C. Presentation** | Is our slot entry still live and rendering? | plugin marker in DOM / non-empty `[data-slot="…"]` |
-
-**Decision rule**
-
-- A fail → fix host/endpoint/runtime
-- B fail → fix inject/`attach`/reference insert (not CSS)
-- A+B pass, C fail → **abdication / render crash / stale bundle**
-- A+B+C pass but cards flash then vanish → retain/`discardPending` logic
-
-**B-pass is the key teaching trick:** hidden `\uFEFF` / `data-composer-chip` with
-**no** rail means attach worked and **only presentation is broken**.
-
-Never start at layout/CSS until A/B/C are classified.
-
-## Why abdication looks like “UI never existed”
-
-Single slots: lowest `priority` wins. If the winner throws during render, Cordis
-**abdicates** it and shows the next occupant until a full reload of a fixed
-bundle.
-
-**Fiber walk (prove C):** inspect Fiber under
-`[data-slot="conversation.input.attachments"]` (or your slot). If the occupant
-is only the native component (e.g. `ComposerAttachments`) and your wrapper is
-absent → abdication, not “empty store.” The button slot can still work because
-it is a **different** entry.
-
-## Repo map (this plugin)
-
-- Register/inject: `src/client/index.ts`
-- Rail UI: `src/client/FileAttachments.tsx`
-- Store: `src/client/FileAttachmentStore.ts`
-- Build: `rm -rf lib && pnpm exec tsdown` then
-  `grep -n 'MARKER' lib/client.js` (tsdown `clean: false` often keeps stale JS)
-- Serve: DSH web plugin combo URL containing `dsh-file-upload-ocr-plugin`
-
-## Method: bisect the crashing render
-
-1. Clean rebuild; prove marker string exists in `lib/client.js`.
-2. Replace suspect body with a static marker; hard reload:
-
-```tsx
-return <div data-ocr-rail="1">OCR-RAIL-DEBUG</div>
+```
+user action → API / host          (A. Backend)
+           → store + draft ref    (B. Model)
+           → slot component JSX   (C. Presentation)
 ```
 
-| Result | Meaning |
-|--------|---------|
-| Marker shows | Register OK; crash is inside hooks/JSX |
-| Marker missing | Register/priority/inject broken, or still serving stale JS |
+## Do these three, in order
 
-3. Re-add in this order (after marker shows):
+Repro first: hard-reload the client, trigger upload (file picker or
+`DataTransfer` + `change` on the plugin `<input type=file>`), then:
 
-   1. Store subscribe only (`useSyncExternalStore`) — OK?
-   2. `useInput(s => s?.phase)` — OK?
-   3. `useInput(s => s?.occurrences ?? [])` — if loop/abdicate → **BAD**
-   4. Fix: `const input = useInput(s => s)` + module-level `EMPTY_*` const
-   5. Card markup without icons, then icons from **current** primitives
+1. **A** — Network: `POST /api/...` status **and** response body non-empty?
+   Fail → fix host / OCR runtime / route. Stop.
+2. **B** — Store row and/or draft ref present?
+   - Example B signals (this plugin): label `\uFEFF` chip (CSS hides
+     `span[title=\uFEFF]`), and/or DSH `data-composer-chip`, and/or a row in
+     `FileAttachmentStore`.
+   Fail → fix `attach` / inject / reference insert. Do not touch CSS. Stop.
+3. **C** — Our rail/wrapper actually mounted?
+   - Example C signal (this plugin): DOM `[data-ocr-rail="1"]`.
+   - Or Fiber: under the attachments seat, is **our** wrapper present, or only
+     the native occupant (e.g. `ComposerAttachments`)?
+   Fail → abdication / render crash / stale bundle (next section). Stop.
 
-### Stable selector rule
+**Teaching trick:** B signals present + no rail ⇒ **A+B passed; only C is
+broken.** That is the usual “keeps not fixing” trap (people blame OCR or CSS).
+
+| Layer fails | Open | Do not open first |
+|-------------|------|-------------------|
+| A | host route, OCR/runtime, network | React / CSS |
+| B | store, attach, reference insert | layout |
+| C | slot inject, rail JSX, loaded JS | “maybe OCR broke” |
+
+After any fix, re-walk A→B→C once.
+
+## Once A fails / Once B fails
+
+**A:** Confirm body (not just HTTP 200). Check OCR env / setup scripts / host
+`src/index.ts` extract route. Restart web profile if runtime just installed.
+
+**B:** Confirm attach wrote store + draft ref. Read inject/`attach` in
+`src/client/index.ts` and store APIs in `FileAttachmentStore.ts`. Missing chip
+with API OK ⇒ insert path broken, not presentation.
+
+## Why C fails while A+B look fine (abdication)
+
+Single Cordis slots: **lowest `priority` wins**. If that occupant throws during
+render, Cordis **abdicates** (retires) it and shows the next occupant for the
+rest of that registration’s life — usually until hard reload of a fixed bundle
+(or remount/re-register). Button/API/store can still work (other entries).
+
+**Prove C (actionable):**
+
+1. Console: any render throw / undefined component from the plugin bundle?
+2. DOM: query **your** marker (read current marker from rail JSX; this plugin:
+   `[data-ocr-rail="1"]`). Missing after a successful B ⇒ C.
+3. Do **not** hunt for `[data-slot]` — DSH does not reliably emit that attribute.
+4. Fiber (optional): attachments seat shows only native name ⇒ abdicated.
+
+**Lifecycle subtype (still C):** cards flash then vanish while `extracting` →
+cleanup/retain bug, not abdication. See known-good cleanup below.
+
+## How to repair C (only after A+B pass)
+
+1. **Console** for the throw that caused abdication.
+2. **Prove loaded bundle** — `rm -rf lib && pnpm run build` (this repo:
+   `tsdown`, `clean: false`). Hard reload. Grep **browser-served** plugin JS
+   (Network URL containing the plugin id) for your fix string / `rev=`.
+3. **Static marker** — temporary dead HTML in the rail. Shows ⇒ register OK,
+   crash inside hooks/JSX. Missing ⇒ check inject/`priority` in
+   `src/client/index.ts`, or still stale JS.
+4. **Bisect render** — re-add: store subscribe → safe `useInput` → markup →
+   icons from **current** primitives exports.
+5. On bumps: diff how native InputBar mounts attachments today; do not reuse
+   prior seat names or removed icons.
+
+### Stable selector rule (any version)
 
 ```ts
-// BAD — new [] every snapshot → infinite loop → abdicate
+// BAD — new [] every check → loop → abdicate
 useInput(s => s?.occurrences ?? [])
 
 // GOOD
 const input = useInput(s => s)
-const occurrences = input?.occurrences ?? EMPTY_OCCURRENCES
+const occurrences = input?.occurrences ?? EMPTY_OCCURRENCES  // module const
 ```
 
-Never allocate fresh empties inside selector lambdas unless the fallback is a
-stable module constant.
+## Version upgrades — same map, new answers
 
-## Cleanup rule (not empty-draft)
+A→B→C never changes. What changes: slot/seat wiring, primitives exports,
+canonical seat (drop dead dual rails once the live seat works). Re-read native
+mount + diff primitives, then re-run the three checks.
 
-Do **not** call `discardPending` / wipe cards just because the text draft is
-empty while OCR is still `extracting`. Empty draft ≠ safe to clear in-flight
-work. Discard pending on submit boundary (`phase === 'submitting'`), then
-`retain` to draft refs after send.
+## This plugin’s file map (examples only)
 
-## Browser verification
+| Layer | Look in |
+|-------|---------|
+| A | `src/index.ts`, OCR setup scripts / `$DSH_HOME/ocr-runtime` |
+| B | `FileAttachmentStore.ts`, attach / chip insert in `src/client/index.ts` |
+| C | slot inject in `src/client/index.ts`, rail in `FileAttachments.tsx` |
 
-1. Prove **loaded** bundle: find performance URL with the plugin id; `fetch`;
-   assert it `includes` your marker / new API name / note `rev=`.
-2. Hard reload after every rebuild (`?cb=` or Ctrl+Shift+R).
-3. If CDP `DOM.setFileInputFiles` is blocked, use `DataTransfer` + `change` on
-   the plugin `<input type=file>`.
-4. Assert timeline: pending label → ready `N KB · kind` → slot HTML non-empty.
-
-## Worked example
-
-Cards missing, `POST /api/file-extract` = 200:
-
-1. Confirm response body → **A pass**
-2. Draft has `\uFEFF` / file chip → **B pass** (fix attach, not CSS)
-3. Attachments slot Fiber = native only → **C abdication**
-4. `rm -rf lib && pnpm exec tsdown`; static marker; hard reload
-5. Marker OK → bisect `useInput` as above; marker missing → register/stale JS
-6. Prove loaded JS contains the fix string; confirm pending → ready cards
-
-## On any DSH client bump
-
-1. Read native seat in installed
-   `node_modules/@deepseek-ai/dsh-client-ui-conversation` /
-   `dsh-client-ui-attachment` (how InputBar renders attachments).
-2. Diff primitives exports (icons renamed across versions).
-3. Drop proven-dead compatibility seats (legacy dual dock+attachments rails).
-
-## Known good patterns (this seat)
-
-- Shadow `conversation.input.attachments` at `priority: -10`; wrap native at `0`
-- Inject `ocrSessionId` (not `sessionId`) so session-maybe merges cannot wipe it
-- Show store `pending` + `ready`; cleanup on submitting, not empty draft
-- Icons: `IconCloseOutlineRegular` (not removed `IconCloseOutline16`)
+**Known good for current in-composer seat (re-verify after bumps):** shadow
+`conversation.input.attachments` at `priority: -10` (native typically `0`).
+Rail follows store `pending` + `ready`, not draft emptiness. Cleanup:
+`discardPending` while `phase === 'submitting'` and no OCR refs; `retain` only
+**after leaving** submitting with empty refs — never `retain`/wipe on empty
+draft while `extracting` or idle empty draft.
 
 ## Anti-patterns
 
-- Tweaking CSS while slot `innerHTML` is empty
-- Editing `src/` without grepping the new string in `lib/client.js`
-- Keeping legacy dual rails after the in-composer seat works
-- Field-level `useInput` with `?? []` / `?? {}`
-- `discardPending` on empty draft while status is `extracting`
+- CSS while the rail marker is absent (skipped A→B→C)
+- Blaming OCR when a B chip/ref already exists
+- Editing `src/` without proving the string in loaded Network JS
+- Copying a prior DSH version’s icons or dock seat as the permanent answer
+
+## Minimal worked pass
+
+API 200, cards missing:
+
+1. Hard reload → upload → body OK → **A pass**
+2. `\uFEFF` chip / store row → **B pass** → do not touch attach
+3. No `[data-ocr-rail="1"]` / Fiber native-only → **C**
+4. Console throw? → clean build → marker → bisect `useInput`/icons → prove
+   served JS → pending → ready cards
