@@ -260,8 +260,14 @@ function requestAbortSignal(req: IncomingMessage, res: ServerResponse): AbortSig
   const abort = (): void => {
     if (!controller.signal.aborted) controller.abort()
   }
+  // Node may emit IncomingMessage `close` after the body is fully consumed while
+  // the response is still pending (OCR). Only cancel when the request did not
+  // complete, or when the client drops the connection before we finish writing.
   req.on('aborted', abort)
   req.on('close', () => {
+    if (!req.complete) abort()
+  })
+  res.on('close', () => {
     if (!res.writableEnded) abort()
   })
   return controller.signal
@@ -289,8 +295,9 @@ export function apply(ctx: Context, config: Config): void {
         if (typeof encodedFilename !== 'string') throw new Error('缺少 x-dsh-file-name 请求头 / Missing x-dsh-file-name header.')
         const filename = decodeURIComponent(encodedFilename)
         if (filename === '' || basename(filename) !== filename) throw new Error('文件名无效 / Invalid file name.')
+        const data = await readFile(req, config.maxFileBytes)
         const signal = requestAbortSignal(req, res)
-        const result = await runExtract(await readFile(req, config.maxFileBytes), filename, config, signal)
+        const result = await runExtract(data, filename, config, signal)
         json(res, 200, result)
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error))
