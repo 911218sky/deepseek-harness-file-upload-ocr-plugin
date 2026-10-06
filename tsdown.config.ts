@@ -23,6 +23,20 @@ const config: UserConfig = [
     },
   },
   {
+    // Plain ESM for Node verify scripts (no ModuleLoader banner).
+    entry: { detectCoords: 'src/client/detectCoords.ts' },
+    format: ['esm'],
+    platform: 'neutral',
+    outDir: 'lib',
+    clean: false,
+    dts: false,
+    sourcemap: false,
+    deps: { neverBundle },
+    outputOptions: {
+      entryFileNames: 'detectCoords.js',
+    },
+  },
+  {
     entry: { client: 'src/client/index.ts' },
     format: ['cjs'],
     platform: 'browser',

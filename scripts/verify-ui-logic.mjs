@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict'
+import {
+  detectAppendSpan,
+  detectChipRemoveSpan,
+} from '../lib/detectCoords.js'
 
 class FileAttachmentStore {
   sessions = new Map()
@@ -193,31 +197,6 @@ assert.equal(batch.get(session).length, 0)
 assert.equal(batch.hasPending(session, still), true)
 
 console.log('ui-retain-logic-ok')
-
-/**
- * Mirror of detectAppendSpan / detectChipRemoveSpan — clipboard draft length
- * must shrink by (occurrence.length - 1) per chip to recover detect coordinates.
- */
-function clipboardToDetectOffset(occurrences, clipboardOffset) {
-  let detect = clipboardOffset
-  for (const occurrence of occurrences) {
-    if (occurrence.offset >= clipboardOffset) continue
-    detect -= Math.max(0, occurrence.length - 1)
-  }
-  return detect < 0 ? 0 : detect
-}
-
-function detectAppendSpan(snapshot) {
-  const end = clipboardToDetectOffset(snapshot.occurrences, snapshot.draft.length)
-  return { start: end, end, draftRev: snapshot.draftRev }
-}
-
-function detectChipRemoveSpan(snapshot, occurrence) {
-  const start = clipboardToDetectOffset(snapshot.occurrences, occurrence.offset)
-  let end = start + 1
-  if (snapshot.draft[occurrence.offset + occurrence.length] === ' ') end += 1
-  return { start, end, draftRev: snapshot.draftRev }
-}
 
 assert.deepEqual(
   detectAppendSpan({ draft: '', draftRev: 1, occurrences: [] }),

@@ -20,6 +20,7 @@ import type { ExtractedFile, FileAttachmentStore, PendingFile } from './FileAtta
 import { ocr } from './ocrStyles.ts'
 
 const ENDPOINT = '/api/file-extract'
+const HEALTH_ENDPOINT = '/api/file-extract/health'
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,.docx,.xlsx,.xlsm,.pptx,.txt,.md,.csv,.tsv,.json,.xml,.yaml,.yml,.html,.htm,.log,.py,.js,.ts,.tsx,.css'
 export const FILE_SOURCE = 'file-attachment'
 
@@ -27,6 +28,14 @@ interface ExtractResponse {
   kind: string
   text: string
 }
+
+interface HealthResponse {
+  ready: boolean
+  python: string | null
+  error: string | null
+}
+
+const OCR_SETUP_HINT = 'OCR 環境未安裝，請執行 scripts/setup-ocr.sh / OCR runtime missing — run setup-ocr.sh'
 
 export interface FileAttachButtonInjected {
   attach(file: File, result: ExtractResponse): void
@@ -44,7 +53,7 @@ export interface FileAttachButtonInjected {
 export function formatExtractError(message: string): string {
   const lower = message.toLowerCase()
   if (lower.includes('ocr environment is not installed') || message.includes('OCR 环境未安装')) {
-    return 'OCR 環境未安裝，請執行 scripts/setup-ocr.sh / OCR runtime missing — run setup-ocr.sh'
+    return OCR_SETUP_HINT
   }
   // Match Pillow truncate phrases only — do not remap unrelated "truncated" errors.
   if (
@@ -168,6 +177,27 @@ export function FileAttachButton({
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pendingFiles, setPendingFiles] = useState<File[] | null>(null)
+  const [ocrReady, setOcrReady] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const response = await fetch(HEALTH_ENDPOINT, { method: 'GET', cache: 'no-store' })
+        const value = await response.json() as HealthResponse
+        if (cancelled) return
+        setOcrReady(value.ready === true)
+        if (value.ready !== true) {
+          setError(formatExtractError(value.error ?? OCR_SETUP_HINT))
+        }
+      } catch {
+        if (cancelled) return
+        // Health probe failed (route missing / network) — allow upload; POST will surface errors.
+        setOcrReady(true)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   const processFiles = async (selected: File[], imageMode: ImageHandleMode | null): Promise<void> => {
     if (selected.length === 0) return
@@ -238,6 +268,10 @@ export function FileAttachButton({
 
   const upload = (selected: File[]): void => {
     if (selected.length === 0 || busyRef.current) return
+    if (ocrReady === false) {
+      setError(OCR_SETUP_HINT)
+      return
+    }
     setError(null)
     const needsChoice = attachImage !== undefined && selected.some(file => file.type.startsWith('image/'))
     if (needsChoice) {
@@ -305,7 +339,7 @@ export function FileAttachButton({
       event.preventDefault()
       event.stopImmediatePropagation()
       reset()
-      if (!busyRef.current && pendingFiles === null) upload(files)
+      if (!busyRef.current && pendingFiles === null && ocrReady !== false) upload(files)
     }
     document.addEventListener('dragenter', onDragEnter, true)
     document.addEventListener('dragover', onDragOver, true)
@@ -319,13 +353,17 @@ export function FileAttachButton({
       document.removeEventListener('drop', onDrop, true)
       window.removeEventListener('dragend', reset)
     }
-  }, [attach, attachImage, pendingFiles])
+  }, [attach, attachImage, pendingFiles, ocrReady])
 
   const pendingImageCount = pendingFiles?.filter(file => file.type.startsWith('image/')).length ?? 0
+  const attachDisabled = busy || pendingFiles !== null || ocrReady === false
+  const attachTitle = ocrReady === false
+    ? OCR_SETUP_HINT
+    : (error ?? '添加文件 / Add file')
 
   return (
     <span style={ocr.buttonRoot}>
-      <input ref={picker} style={ocr.hidden} type="file" accept={ACCEPT} multiple onChange={(event) => {
+      <input ref={picker} style={ocr.hidden} type="file" accept={ACCEPT} multiple disabled={attachDisabled} onChange={(event) => {
         const selected = [...(event.target.files ?? [])]
         event.target.value = ''
         upload(selected)
@@ -334,11 +372,15 @@ export function FileAttachButton({
         variant="ghost"
         size="sm"
         icon={<IconPaperclipOutlineRegular size={16} />}
-        disabled={busy || pendingFiles !== null}
+        disabled={attachDisabled}
         aria-label="添加文件 / Add file"
         aria-busy={busy}
-        title={error ?? '添加文件 / Add file'}
+        title={attachTitle}
         onClick={() => {
+          if (ocrReady === false) {
+            setError(OCR_SETUP_HINT)
+            return
+          }
           setError(null)
           picker.current?.click()
         }}
@@ -346,9 +388,13 @@ export function FileAttachButton({
       {error !== null && <span style={ocr.error} role="alert">{error}</span>}
       {dragActive && (
         <DropMask
-          disabled={busy}
-          title={busy ? '正在添加文件 / Adding files' : '拖放文件以上传 / Drop files to upload'}
-          desc={busy ? undefined : '支持 PDF、图片、Word、Excel、PPT 和文本文件 / PDF, images, Word, Excel, PPT, and text files'}
+          disabled={busy || ocrReady === false}
+          title={
+            ocrReady === false
+              ? OCR_SETUP_HINT
+              : (busy ? '正在添加文件 / Adding files' : '拖放文件以上传 / Drop files to upload')
+          }
+          desc={busy || ocrReady === false ? undefined : '支持 PDF、图片、Word、Excel、PPT 和文本文件 / PDF, images, Word, Excel, PPT, and text files'}
         />
       )}
       <Modal

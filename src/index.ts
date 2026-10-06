@@ -6,16 +6,19 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 
+const execFileAsync = promisify(execFile)
+
 const ROUTE = '/api/file-extract'
+const HEALTH_ROUTE = '/api/file-extract/health'
 const HELPER = fileURLToPath(new URL('../extract.py', import.meta.url))
 const PACKAGE_ROOT = fileURLToPath(new URL('..', import.meta.url))
-
-/** Max concurrent Python OCR children (RapidOCR is memory-heavy). */
-const MAX_OCR_IN_FLIGHT = 1
+const OCR_READY_PROBE_MS = 5_000
+const OCR_IMPORT_PROBE = 'import rapidocr_onnxruntime'
 
 /**
  * Resolve Harness home: `$DSH_HOME`, else a home that already has OCR runtime,
@@ -67,6 +70,8 @@ export interface Config {
   nativeTextMinChars: number
   timeoutMs: number
   maxOutputChars: number
+  /** Max concurrent Python OCR children (RapidOCR is memory-heavy). */
+  maxOcrInFlight: number
 }
 
 /** Cordis configuration schema. */
@@ -78,6 +83,7 @@ export const Config: Schema<Config> = Schema.object({
   nativeTextMinChars: Schema.natural().default(24),
   timeoutMs: Schema.natural().min(1).default(900_000),
   maxOutputChars: Schema.natural().min(1).default(1_000_000),
+  maxOcrInFlight: Schema.natural().min(1).max(4).default(1),
 })
 
 export const name = 'file-upload-ocr'
@@ -88,6 +94,20 @@ interface ExtractResult {
   text: string
 }
 
+export type OcrReadyState = {
+  ready: boolean
+  python: string | null
+  error: string | null
+}
+
+const NOT_INSTALLED_MESSAGE = (
+  'OCR 环境未安装 / OCR environment is not installed. '
+  + '请运行 scripts/setup-ocr.ps1 或 scripts/setup-ocr.sh '
+  + '(安装到 $DSH_HOME/ocr-runtime，升级插件后无需重装) / '
+  + 'Run scripts/setup-ocr.ps1 or scripts/setup-ocr.sh '
+  + '(installs under $DSH_HOME/ocr-runtime; survives plugin upgrades).'
+)
+
 function resolvePython(command: string): string {
   if (command !== 'auto') return command
   const configured = process.env.DSH_FILE_OCR_PYTHON
@@ -96,13 +116,32 @@ function resolvePython(command: string): string {
   if (existsSync(durable)) return durable
   const legacy = packageLocalPythonPath()
   if (existsSync(legacy)) return legacy
-  throw new Error(
-    'OCR 环境未安装 / OCR environment is not installed. '
-    + '请运行 scripts/setup-ocr.ps1 或 scripts/setup-ocr.sh '
-    + '(安装到 $DSH_HOME/ocr-runtime，升级插件后无需重装) / '
-    + 'Run scripts/setup-ocr.ps1 or scripts/setup-ocr.sh '
-    + '(installs under $DSH_HOME/ocr-runtime; survives plugin upgrades).',
-  )
+  throw new Error(NOT_INSTALLED_MESSAGE)
+}
+
+/** Probe that the resolved interpreter can import RapidOCR (not just existsSync). */
+export async function assertOcrReady(pythonPath: string): Promise<OcrReadyState> {
+  try {
+    await execFileAsync(pythonPath, ['-c', OCR_IMPORT_PROBE], {
+      encoding: 'utf8',
+      env: cleanEnvironment(),
+      timeout: OCR_READY_PROBE_MS,
+      windowsHide: true,
+    })
+    return { ready: true, python: pythonPath, error: null }
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    const detail = 'stderr' in err && typeof (err as NodeJS.ErrnoException & { stderr?: string }).stderr === 'string'
+      ? (err as NodeJS.ErrnoException & { stderr: string }).stderr.trim()
+      : err.message
+    return {
+      ready: false,
+      python: pythonPath,
+      error: detail.length > 0
+        ? `${NOT_INSTALLED_MESSAGE} (${detail})`
+        : NOT_INSTALLED_MESSAGE,
+    }
+  }
 }
 
 function cleanEnvironment(): NodeJS.ProcessEnv {
@@ -132,8 +171,10 @@ class ExtractQueue {
   private active = 0
   private readonly waiters: Array<() => void> = []
 
+  constructor(private readonly maxInFlight: number) {}
+
   async run<T>(task: () => Promise<T>): Promise<T> {
-    if (this.active >= MAX_OCR_IN_FLIGHT) {
+    if (this.active >= this.maxInFlight) {
       await new Promise<void>((resolve) => { this.waiters.push(resolve) })
     }
     this.active += 1
@@ -146,8 +187,6 @@ class ExtractQueue {
     }
   }
 }
-
-const extractQueue = new ExtractQueue()
 
 function parseExtractStdout(stdout: string): ExtractResult {
   let parsed: unknown
@@ -179,6 +218,7 @@ function runExtract(
   data: Buffer,
   filename: string,
   config: Config,
+  queue: ExtractQueue,
   signal?: AbortSignal,
 ): Promise<ExtractResult> {
   const args = [
@@ -189,7 +229,7 @@ function runExtract(
     '--native-text-min-chars', String(config.nativeTextMinChars),
     '--max-output-chars', String(config.maxOutputChars),
   ]
-  return extractQueue.run(() => new Promise((resolve, reject) => {
+  return queue.run(() => new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(new Error('已取消辨識 / Extraction cancelled'))
       return
@@ -275,6 +315,51 @@ function requestAbortSignal(req: IncomingMessage, res: ServerResponse): AbortSig
 
 /** Register the same-origin generic file extraction endpoint. */
 export function apply(ctx: Context, config: Config): void {
+  const queue = new ExtractQueue(config.maxOcrInFlight)
+  let readyState: OcrReadyState = {
+    ready: false,
+    python: null,
+    error: 'OCR readiness probe has not finished yet.',
+  }
+  let probe: Promise<OcrReadyState> | null = null
+
+  const refreshReady = (): Promise<OcrReadyState> => {
+    if (probe !== null) return probe
+    probe = (async (): Promise<OcrReadyState> => {
+      try {
+        const python = resolvePython(config.pythonCommand)
+        readyState = await assertOcrReady(python)
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error))
+        readyState = { ready: false, python: null, error: err.message }
+      } finally {
+        probe = null
+      }
+      return readyState
+    })()
+    return probe
+  }
+
+  void refreshReady().then((state) => {
+    if (state.ready) ctx.logger.info('file-upload-ocr: OCR runtime ready (%s)', state.python)
+    else ctx.logger.warn('file-upload-ocr: OCR runtime not ready — %s', state.error)
+  })
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: HEALTH_ROUTE,
+    async handler(req, res) {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        json(res, 405, { error: '仅支持 GET / Only GET is supported.' })
+        return
+      }
+      const state = readyState.python === null && readyState.error?.includes('not finished')
+        ? await refreshReady()
+        : readyState
+      json(res, state.ready ? 200 : 503, state)
+    },
+  }), 'file-input: extraction health')
+
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: ROUTE,
@@ -291,13 +376,19 @@ export function apply(ctx: Context, config: Config): void {
           json(res, 403, { error: '不允许跨域文件上传 / Cross-origin file upload is not allowed.' })
           return
         }
+        if (!readyState.ready) {
+          const state = await refreshReady()
+          if (!state.ready) {
+            throw new Error(state.error ?? NOT_INSTALLED_MESSAGE)
+          }
+        }
         const encodedFilename = req.headers['x-dsh-file-name']
         if (typeof encodedFilename !== 'string') throw new Error('缺少 x-dsh-file-name 请求头 / Missing x-dsh-file-name header.')
         const filename = decodeURIComponent(encodedFilename)
         if (filename === '' || basename(filename) !== filename) throw new Error('文件名无效 / Invalid file name.')
         const data = await readFile(req, config.maxFileBytes)
         const signal = requestAbortSignal(req, res)
-        const result = await runExtract(data, filename, config, signal)
+        const result = await runExtract(data, filename, config, queue, signal)
         json(res, 200, result)
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error))

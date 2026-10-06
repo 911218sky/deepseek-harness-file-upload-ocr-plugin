@@ -9,3 +9,4 @@
         nativeTextMinChars: 24
         timeoutMs: 900000
         maxOutputChars: 1000000
+        maxOcrInFlight: 1
