@@ -1,6 +1,6 @@
 {
   "name": "dsh-file-upload-ocr-plugin",
-  "version": "2.1.29",
+  "version": "2.1.30",
   "description": "DeepSeek Harness 文件上传与本地 OCR 插件 / File upload and local OCR plugin for DeepSeek Harness: PDF, Word, Excel, PowerPoint, images, and text attachments.",
   "keywords": [
     "deepseek-harness",
@@ -66,16 +66,16 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
-    "@deepseek-ai/dsh-api-session-controller": "^0.2.0-rc.2",
-    "@deepseek-ai/dsh-attachment": "^0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-attachment": "^0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-chat": "^0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-conversation": "^0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-input-trigger": "^0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-primitives": "^0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.2.0-rc.2",
-    "@deepseek-ai/dsh-host-webserver": "^0.2.0-rc.2",
-    "@deepseek-ai/dsh-session": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-attachment": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-attachment": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-chat": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-conversation": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-input-trigger": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-host-webserver": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-session": ">=0.2.0-0 <0.3.0",
     "react": "^18.2.0"
   },
   "dependencies": {
@@ -83,16 +83,16 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
-    "@deepseek-ai/dsh-api-session-controller": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-attachment": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-attachment": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-chat": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-conversation": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-input-trigger": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-host-webserver": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-session": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-attachment": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-attachment": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-chat": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-conversation": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-input-trigger": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-host-webserver": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-session": ">=0.2.0-0 <0.3.0",
     "@types/node": "^22.20.0",
     "@types/react": "~18.3.1",
     "playwright": "1.49.1",
@@ -102,6 +102,7 @@
     "unrun": "^0.1.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "dsh": ">=0.2.0-0 <0.3.0"
   }
 }
