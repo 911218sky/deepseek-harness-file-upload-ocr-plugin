@@ -193,3 +193,51 @@ assert.equal(batch.get(session).length, 0)
 assert.equal(batch.hasPending(session, still), true)
 
 console.log('ui-retain-logic-ok')
+
+/**
+ * Mirror of detectAppendSpan — clipboard draft length must shrink by
+ * (occurrence.length - 1) per chip to recover detect coordinates.
+ */
+function detectAppendSpan(snapshot) {
+  let end = snapshot.draft.length
+  for (const occurrence of snapshot.occurrences) {
+    end -= Math.max(0, occurrence.length - 1)
+  }
+  if (end < 0) end = 0
+  return { start: end, end, draftRev: snapshot.draftRev }
+}
+
+assert.deepEqual(
+  detectAppendSpan({ draft: '', draftRev: 1, occurrences: [] }),
+  { start: 0, end: 0, draftRev: 1 },
+)
+
+// One OCR chip clipboard `[文件 / File: a.pdf]` (20) + trailing space → detect `￼ `.
+const chip = '[文件 / File: a.pdf]'
+assert.deepEqual(
+  detectAppendSpan({
+    draft: `${chip} `,
+    draftRev: 3,
+    occurrences: [{ length: chip.length }],
+  }),
+  { start: 2, end: 2, draftRev: 3 },
+)
+
+// Two chips + spaces: using raw draft.length would be out of detect bounds.
+const chip2 = '[文件 / File: b.docx]'
+assert.deepEqual(
+  detectAppendSpan({
+    draft: `${chip} ${chip2} `,
+    draftRev: 5,
+    occurrences: [{ length: chip.length }, { length: chip2.length }],
+  }),
+  { start: 4, end: 4, draftRev: 5 },
+)
+
+// Plain text only: clipboard === detect.
+assert.deepEqual(
+  detectAppendSpan({ draft: 'hello', draftRev: 2, occurrences: [] }),
+  { start: 5, end: 5, draftRev: 2 },
+)
+
+console.log('detect-append-span-ok')

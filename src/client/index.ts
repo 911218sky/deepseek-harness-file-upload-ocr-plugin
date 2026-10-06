@@ -23,6 +23,25 @@ export const inject = ['slots', 'sessions', 'conversation', 'inputTriggers']
  */
 const HIDDEN_CHIP_LABEL = '\uFEFF'
 
+/**
+ * `slash/input-insert-reference` spans use **detect** coordinates (each chip is
+ * one U+FFFC). `InputState.draft` / occurrence offsets use the longer clipboard
+ * expansion — `draft.length` as the insert point fails once any reference chip
+ * (including a prior OCR file) already exists.
+ */
+export function detectAppendSpan(snapshot: {
+  draft: string
+  draftRev: number
+  occurrences: readonly { length: number }[]
+}): { start: number; end: number; draftRev: number } {
+  let end = snapshot.draft.length
+  for (const occurrence of snapshot.occurrences) {
+    end -= Math.max(0, occurrence.length - 1)
+  }
+  if (end < 0) end = 0
+  return { start: end, end, draftRev: snapshot.draftRev }
+}
+
 function ensureHiddenChipStyles(): void {
   if (typeof document === 'undefined') return
   const tagId = 'dsh-file-upload-ocr-hidden-reference-chip'
@@ -106,6 +125,9 @@ export function apply(ctx: Context): void {
       attach: (browserFile: File, result: { kind: string; text: string }) => {
         const { actx, input } = scopedInput(sessionId)
         const snapshot = input.state.getSnapshot()
+        if (snapshot.phase !== 'plain' && snapshot.phase !== 'claimed') {
+          throw new Error('当前输入状态不能添加文件 / Files cannot be added in the current input state.')
+        }
         const file: ExtractedFile = {
           ref: crypto.randomUUID(),
           name: browserFile.name,
@@ -123,7 +145,7 @@ export function apply(ctx: Context): void {
         }
         const accepted = actx.bail(actx, 'slash/input-insert-reference', {
           reference,
-          span: { start: snapshot.draft.length, end: snapshot.draft.length, draftRev: snapshot.draftRev },
+          span: detectAppendSpan(snapshot),
         }) === true
         if (!accepted) {
           files.remove(sessionId, file.ref)
