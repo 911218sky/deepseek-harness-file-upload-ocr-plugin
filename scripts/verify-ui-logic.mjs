@@ -195,16 +195,28 @@ assert.equal(batch.hasPending(session, still), true)
 console.log('ui-retain-logic-ok')
 
 /**
- * Mirror of detectAppendSpan — clipboard draft length must shrink by
- * (occurrence.length - 1) per chip to recover detect coordinates.
+ * Mirror of detectAppendSpan / detectChipRemoveSpan — clipboard draft length
+ * must shrink by (occurrence.length - 1) per chip to recover detect coordinates.
  */
-function detectAppendSpan(snapshot) {
-  let end = snapshot.draft.length
-  for (const occurrence of snapshot.occurrences) {
-    end -= Math.max(0, occurrence.length - 1)
+function clipboardToDetectOffset(occurrences, clipboardOffset) {
+  let detect = clipboardOffset
+  for (const occurrence of occurrences) {
+    if (occurrence.offset >= clipboardOffset) continue
+    detect -= Math.max(0, occurrence.length - 1)
   }
-  if (end < 0) end = 0
+  return detect < 0 ? 0 : detect
+}
+
+function detectAppendSpan(snapshot) {
+  const end = clipboardToDetectOffset(snapshot.occurrences, snapshot.draft.length)
   return { start: end, end, draftRev: snapshot.draftRev }
+}
+
+function detectChipRemoveSpan(snapshot, occurrence) {
+  const start = clipboardToDetectOffset(snapshot.occurrences, occurrence.offset)
+  let end = start + 1
+  if (snapshot.draft[occurrence.offset + occurrence.length] === ' ') end += 1
+  return { start, end, draftRev: snapshot.draftRev }
 }
 
 assert.deepEqual(
@@ -218,7 +230,7 @@ assert.deepEqual(
   detectAppendSpan({
     draft: `${chip} `,
     draftRev: 3,
-    occurrences: [{ length: chip.length }],
+    occurrences: [{ offset: 0, length: chip.length }],
   }),
   { start: 2, end: 2, draftRev: 3 },
 )
@@ -229,7 +241,10 @@ assert.deepEqual(
   detectAppendSpan({
     draft: `${chip} ${chip2} `,
     draftRev: 5,
-    occurrences: [{ length: chip.length }, { length: chip2.length }],
+    occurrences: [
+      { offset: 0, length: chip.length },
+      { offset: chip.length + 1, length: chip2.length },
+    ],
   }),
   { start: 4, end: 4, draftRev: 5 },
 )
@@ -241,3 +256,28 @@ assert.deepEqual(
 )
 
 console.log('detect-append-span-ok')
+
+// Remove first of two chips (+ trailing space) without touching the second.
+const twoChipDraft = `${chip} ${chip2} `
+const occA = { offset: 0, length: chip.length }
+const occB = { offset: chip.length + 1, length: chip2.length }
+assert.deepEqual(
+  detectChipRemoveSpan({ draft: twoChipDraft, draftRev: 7, occurrences: [occA, occB] }, occA),
+  { start: 0, end: 2, draftRev: 7 },
+)
+assert.deepEqual(
+  detectChipRemoveSpan({ draft: twoChipDraft, draftRev: 7, occurrences: [occA, occB] }, occB),
+  { start: 2, end: 4, draftRev: 7 },
+)
+
+// Chip with no trailing space: delete only the U+FFFC.
+assert.deepEqual(
+  detectChipRemoveSpan({
+    draft: chip,
+    draftRev: 1,
+    occurrences: [{ offset: 0, length: chip.length }],
+  }, { offset: 0, length: chip.length }),
+  { start: 0, end: 1, draftRev: 1 },
+)
+
+console.log('detect-chip-remove-span-ok')

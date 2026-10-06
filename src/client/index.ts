@@ -23,23 +23,61 @@ export const inject = ['slots', 'sessions', 'conversation', 'inputTriggers']
  */
 const HIDDEN_CHIP_LABEL = '\uFEFF'
 
+type OccurrenceSlice = {
+  offset: number
+  length: number
+}
+
+type DraftSnapshot = {
+  draft: string
+  draftRev: number
+  occurrences: readonly OccurrenceSlice[]
+}
+
+/**
+ * Fold a clipboard-projection offset to detect coordinates.
+ * Each chip contributes `length` clipboard chars but only one U+FFFC detect char.
+ */
+export function clipboardToDetectOffset(
+  occurrences: readonly OccurrenceSlice[],
+  clipboardOffset: number,
+): number {
+  let detect = clipboardOffset
+  for (const occurrence of occurrences) {
+    if (occurrence.offset >= clipboardOffset) continue
+    detect -= Math.max(0, occurrence.length - 1)
+  }
+  return detect < 0 ? 0 : detect
+}
+
 /**
  * `slash/input-insert-reference` spans use **detect** coordinates (each chip is
  * one U+FFFC). `InputState.draft` / occurrence offsets use the longer clipboard
  * expansion — `draft.length` as the insert point fails once any reference chip
  * (including a prior OCR file) already exists.
  */
-export function detectAppendSpan(snapshot: {
-  draft: string
+export function detectAppendSpan(snapshot: DraftSnapshot): {
+  start: number
+  end: number
   draftRev: number
-  occurrences: readonly { length: number }[]
-}): { start: number; end: number; draftRev: number } {
-  let end = snapshot.draft.length
-  for (const occurrence of snapshot.occurrences) {
-    end -= Math.max(0, occurrence.length - 1)
-  }
-  if (end < 0) end = 0
+} {
+  const end = clipboardToDetectOffset(snapshot.occurrences, snapshot.draft.length)
   return { start: end, end, draftRev: snapshot.draftRev }
+}
+
+/**
+ * Detect span that deletes one chip (and its trailing separator space when
+ * present). Prefer this over `setDraft(...)` — setDraft rebuilds plain text
+ * only and destroys every remaining reference chip.
+ */
+export function detectChipRemoveSpan(
+  snapshot: DraftSnapshot,
+  occurrence: OccurrenceSlice,
+): { start: number; end: number; draftRev: number } {
+  const start = clipboardToDetectOffset(snapshot.occurrences, occurrence.offset)
+  let end = start + 1
+  if (snapshot.draft[occurrence.offset + occurrence.length] === ' ') end += 1
+  return { start, end, draftRev: snapshot.draftRev }
 }
 
 function ensureHiddenChipStyles(): void {
@@ -99,14 +137,16 @@ export function apply(ctx: Context): void {
   const removeFor = (sessionId: SessionId | undefined) => (ref: string) => {
     const resolved = sessionId ?? files.getActiveSessionId()
     if (resolved === undefined) return
-    const { input } = scopedInput(resolved)
+    const { actx, input } = scopedInput(resolved)
     const snapshot = input.state.getSnapshot()
     const occurrence = snapshot.occurrences.find(item => item.source === FILE_SOURCE && item.ref === ref)
     if (occurrence !== undefined) {
-      input.setDraft(
-        snapshot.draft.slice(0, occurrence.offset)
-        + snapshot.draft.slice(occurrence.offset + occurrence.length),
-      )
+      // Delete the Lexical chip via detect coords. setDraft would flatten every
+      // other reference (remaining OCR files, @-mentions) into plain text.
+      actx.bail(actx, 'slash/input-insert-text', {
+        text: '',
+        span: detectChipRemoveSpan(snapshot, occurrence),
+      })
     }
     files.remove(resolved, ref)
   }
