@@ -9,6 +9,7 @@ import {
   IconCloseFillRegular,
   IconPaperclipOutlineRegular,
   Modal,
+  StateDot,
   fileExtension,
   fileSizeText,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -16,7 +17,7 @@ import type { ComposerAttachmentsProps } from '@deepseek-ai/dsh-client-ui-conver
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ExtractedFile, FileAttachmentStore, PendingFile } from './FileAttachmentStore.ts'
-import css from './FileAttachments.module.css'
+import { ocr } from './ocrStyles.ts'
 
 const ENDPOINT = '/api/file-extract'
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,.docx,.xlsx,.xlsm,.pptx,.txt,.md,.csv,.tsv,.json,.xml,.yaml,.yml,.html,.htm,.log,.py,.js,.ts,.tsx,.css'
@@ -83,13 +84,57 @@ type ImageHandleMode = 'vision' | 'ocr'
 function DropMask({ disabled, title, desc }: { disabled: boolean; title: string; desc?: string }): ReactNode {
   if (typeof document === 'undefined') return null
   return createPortal(
-    <div className={css.dropMask} role="status">
-      <div className={css.dropWrap}>
-        <div className={css.dropTitle}>{title}</div>
-        {!disabled && desc !== undefined && <div className={css.dropDesc}>{desc}</div>}
+    <div style={ocr.dropMask} role="status">
+      <div style={ocr.dropWrap}>
+        <div style={ocr.dropTitle}>{title}</div>
+        {!disabled && desc !== undefined && <div style={ocr.dropDesc}>{desc}</div>}
       </div>
     </div>,
     document.body,
+  )
+}
+
+function ChoiceList({ onChoose }: { onChoose: (mode: ImageHandleMode) => void }): ReactNode {
+  const [hover, setHover] = useState<'vision' | 'ocr' | null>(null)
+  return (
+    <div style={ocr.choiceList} role="listbox" aria-label="圖片處理方式">
+      <button
+        type="button"
+        role="option"
+        style={ocr.choiceCard(hover === 'vision')}
+        onMouseEnter={() => { setHover('vision') }}
+        onMouseLeave={() => { setHover(null) }}
+        onFocus={() => { setHover('vision') }}
+        onBlur={() => { setHover(null) }}
+        onClick={() => { onChoose('vision') }}
+      >
+        <span style={ocr.choiceIcon('vision')} aria-hidden="true">
+          <IconBrowseOutlineRegular size={18} />
+        </span>
+        <span style={ocr.choiceCopy}>
+          <span style={ocr.choiceLabel}>直接提供原圖</span>
+          <span style={ocr.choiceHint}>交給支援視覺的模型看圖</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        role="option"
+        style={ocr.choiceCard(hover === 'ocr')}
+        onMouseEnter={() => { setHover('ocr') }}
+        onMouseLeave={() => { setHover(null) }}
+        onFocus={() => { setHover('ocr') }}
+        onBlur={() => { setHover(null) }}
+        onClick={() => { onChoose('ocr') }}
+      >
+        <span style={ocr.choiceIcon('ocr')} aria-hidden="true">
+          <FileTypeIcon path="document.pdf" />
+        </span>
+        <span style={ocr.choiceCopy}>
+          <span style={ocr.choiceLabel}>本機 OCR 轉文字</span>
+          <span style={ocr.choiceHint}>在本機辨識後以文字附件送出</span>
+        </span>
+      </button>
+    </div>
   )
 }
 
@@ -279,15 +324,16 @@ export function FileAttachButton({
   const pendingImageCount = pendingFiles?.filter(file => file.type.startsWith('image/')).length ?? 0
 
   return (
-    <span className={css.buttonRoot}>
-      <input ref={picker} className={css.hidden} type="file" accept={ACCEPT} multiple onChange={(event) => {
+    <span style={ocr.buttonRoot}>
+      <input ref={picker} style={ocr.hidden} type="file" accept={ACCEPT} multiple onChange={(event) => {
         const selected = [...(event.target.files ?? [])]
         event.target.value = ''
         upload(selected)
       }} />
-      <button
-        type="button"
-        className={css.attachButton}
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={<IconPaperclipOutlineRegular size={16} />}
         disabled={busy || pendingFiles !== null}
         aria-label="添加文件 / Add file"
         aria-busy={busy}
@@ -296,10 +342,8 @@ export function FileAttachButton({
           setError(null)
           picker.current?.click()
         }}
-      >
-        <IconPaperclipOutlineRegular size={16} />
-      </button>
-      {error !== null && <span className={css.error} role="alert">{error}</span>}
+      />
+      {error !== null && <span style={ocr.error} role="alert">{error}</span>}
       {dragActive && (
         <DropMask
           disabled={busy}
@@ -319,36 +363,7 @@ export function FileAttachButton({
           </Button>
         )}
       >
-        <div className={css.choiceList} role="listbox" aria-label="圖片處理方式">
-          <button
-            type="button"
-            role="option"
-            className={css.choiceCard}
-            onClick={() => { chooseImageMode('vision') }}
-          >
-            <span className={`${css.choiceIcon} ${css.choiceIconVision}`} aria-hidden="true">
-              <IconBrowseOutlineRegular size={18} />
-            </span>
-            <span className={css.choiceCopy}>
-              <span className={css.choiceLabel}>直接提供原圖</span>
-              <span className={css.choiceHint}>交給支援視覺的模型看圖</span>
-            </span>
-          </button>
-          <button
-            type="button"
-            role="option"
-            className={css.choiceCard}
-            onClick={() => { chooseImageMode('ocr') }}
-          >
-            <span className={`${css.choiceIcon} ${css.choiceIconOcr}`} aria-hidden="true">
-              <FileTypeIcon path="document.pdf" />
-            </span>
-            <span className={css.choiceCopy}>
-              <span className={css.choiceLabel}>本機 OCR 轉文字</span>
-              <span className={css.choiceHint}>在本機辨識後以文字附件送出</span>
-            </span>
-          </button>
-        </div>
+        <ChoiceList onChoose={chooseImageMode} />
       </Modal>
     </span>
   )
@@ -357,10 +372,6 @@ export function FileAttachButton({
 const EMPTY_FILES: readonly ExtractedFile[] = []
 const EMPTY_PENDING: readonly PendingFile[] = []
 const EMPTY_OCCURRENCES: readonly { source: string; ref: string }[] = []
-
-function Spinner(): ReactNode {
-  return <span className={css.spinner} aria-hidden="true" />
-}
 
 function useOcrSessionId(injected: SessionId | undefined, files: FileAttachmentStore): SessionId | undefined {
   const active = useSyncExternalStore(
@@ -465,45 +476,47 @@ export function FileAttachmentRail({
   if (session === undefined || (ready.length === 0 && pending.length === 0)) return null
 
   return (
-    <div className={css.composerRail} data-ocr-rail="1" aria-label="已添加的文件 / Added files">
-      <div className={css.rail}>
+    <div style={ocr.composerRail} data-ocr-rail="1" aria-label="已添加的文件 / Added files">
+      <div style={ocr.rail}>
         {pending.map((file: PendingFile) => (
           <div
             key={file.id}
-            className={`${css.card} ${file.status === 'error' ? css.cardError : css.cardPending}`}
+            style={ocr.fileCard(file.status === 'error' ? 'error' : 'pending')}
             aria-busy={file.status === 'extracting'}
           >
-            <span className={css.fileIcon} aria-hidden="true">
-              {file.status === 'extracting' ? <Spinner /> : <FileTypeIcon path={file.name} />}
+            <span style={ocr.fileIcon} aria-hidden="true">
+              {file.status === 'extracting'
+                ? <StateDot state="ongoing" size={14} />
+                : <FileTypeIcon path={file.name} />}
             </span>
-            <span className={css.details}>
-              <span className={css.name} title={file.name}>{file.name}</span>
-              <span className={css.size}>
+            <span style={ocr.fileDetails}>
+              <span style={ocr.fileName} title={file.name}>{file.name}</span>
+              <span style={{ ...ocr.fileMeta, ...(file.status === 'error' ? ocr.fileMetaError : {}) }}>
                 {file.status === 'extracting'
                   ? `OCR 辨識中… · ${fileSizeText(file.size)}`
                   : truncateError(file.error ?? '辨識失敗')}
               </span>
             </span>
-            <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.id) }}>
+            <button type="button" style={ocr.removeButton} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.id) }}>
               <IconCloseFillRegular size={14} />
             </button>
           </div>
         ))}
         {ready.map((file: ExtractedFile) => (
-          <div key={file.ref} className={css.card}>
-            <span className={css.fileIcon} aria-hidden="true">
+          <div key={file.ref} style={ocr.fileCard('ready')}>
+            <span style={ocr.fileIcon} aria-hidden="true">
               <FileTypeIcon path={file.name} />
             </span>
-            <span className={css.details}>
-              <span className={css.name} title={file.name}>{file.name}</span>
-              <span className={css.size}>
+            <span style={ocr.fileDetails}>
+              <span style={ocr.fileName} title={file.name}>{file.name}</span>
+              <span style={ocr.fileMeta}>
                 {[
                   fileExtension(file.name).toUpperCase().slice(0, 8) || file.kind.toUpperCase(),
                   fileSizeText(file.size),
                 ].filter(Boolean).join(' · ')}
               </span>
             </span>
-            <button type="button" className={css.remove} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.ref) }}>
+            <button type="button" style={ocr.removeButton} aria-label={`移除 / Remove ${file.name}`} onClick={() => { remove(file.ref) }}>
               <IconCloseFillRegular size={14} />
             </button>
           </div>

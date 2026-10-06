@@ -4,7 +4,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { FileTypeIcon, fileExtension, fileSizeText } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import css from './SentFileMessage.module.css'
+import { ocr } from './ocrStyles.ts'
 
 interface SentAttachment {
   name: string
@@ -53,13 +53,13 @@ export function projectAttachedFiles(text: string): { text: string; files: SentA
 function OcrFileCards({ files }: { files: readonly SentAttachment[] }): ReactNode {
   if (files.length === 0) return null
   return (
-    <div className={css.files} data-ocr-sent-files="1">
+    <div style={ocr.sentFiles} data-ocr-sent-files="1">
       {files.map((file, index) => (
-        <div className={css.card} key={`${file.name}:${index}`}>
-          <span className={css.icon} aria-hidden="true"><FileTypeIcon path={file.name} /></span>
-          <span className={css.details}>
-            <span className={css.name} title={file.name}>{file.name}</span>
-            <span className={css.meta}>
+        <div style={ocr.sentCard} key={`${file.name}:${index}`}>
+          <span style={ocr.fileIcon} aria-hidden="true"><FileTypeIcon path={file.name} /></span>
+          <span style={ocr.fileDetails}>
+            <span style={ocr.fileName} title={file.name}>{file.name}</span>
+            <span style={ocr.fileMeta}>
               {[
                 fileExtension(file.name).toUpperCase().slice(0, 8) || file.kind.toUpperCase(),
                 file.size !== undefined ? fileSizeText(file.size) : '',
@@ -116,15 +116,15 @@ function FallbackUserBubble({ node, renderMessageImages }: UserChatProps | Steer
   }
   const projected = projectAttachedFiles(texts.join(''))
   return (
-    <div className={css.row}>
-      <div className={css.stack}>
+    <div style={ocr.sentRow}>
+      <div style={ocr.sentStack}>
         {images.length > 0 && renderMessageImages({
           images,
           align: 'end',
           compact: images.length > 1,
         })}
         <OcrFileCards files={projected.files} />
-        {projected.text !== '' && <div className={css.bubble}>{projected.text}</div>}
+        {projected.text !== '' && <div style={ocr.sentBubble}>{projected.text}</div>}
       </div>
     </div>
   )
@@ -146,7 +146,7 @@ export function createOcrUserChatNode(ctx: Context): ComponentType<UserChatProps
     const { props: next, files } = rewriteNodeContent(props)
     if (Native === undefined) return <FallbackUserBubble {...props} />
     return (
-      <div className={css.wrap}>
+      <div style={ocr.sentWrap}>
         <OcrFileCards files={files} />
         <Native {...next} />
       </div>
@@ -168,7 +168,7 @@ export function createOcrSteeringChatNode(ctx: Context): ComponentType<SteeringC
     const { props: next, files } = rewriteNodeContent(props)
     if (Native === undefined) return <FallbackUserBubble {...props} />
     return (
-      <div className={css.wrap}>
+      <div style={ocr.sentWrap}>
         <OcrFileCards files={files} />
         <Native {...next} />
       </div>

@@ -25,11 +25,10 @@ const HIDDEN_CHIP_LABEL = '\uFEFF'
 
 function ensureHiddenChipStyles(): void {
   if (typeof document === 'undefined') return
-  const tagId = 'dsh-file-upload-ocr-plugin/hidden-reference-chip'
-  if (document.querySelector(`style[data-plugin-css=${JSON.stringify(tagId)}]`) !== null) return
+  const tagId = 'dsh-file-upload-ocr-hidden-reference-chip'
+  if (document.getElementById(tagId) !== null) return
   const tag = document.createElement('style')
-  tag.dataset.plugin = 'dsh-file-upload-ocr-plugin'
-  tag.dataset.pluginCss = tagId
+  tag.id = tagId
   tag.textContent = [
     `span[title=${JSON.stringify(HIDDEN_CHIP_LABEL)}]{`,
     'display:none!important;',
