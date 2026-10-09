@@ -69,7 +69,7 @@ until hard reload of a fixed bundle. Prove: console throw; DOM missing
 ### Stable `useInput` (any version)
 
 ```ts
-// BAD — new [] every check → loop → abdicate
+// BAD — new [] every check → loop → release slot
 useInput(s => s?.occurrences ?? [])
 
 // GOOD
@@ -89,15 +89,15 @@ on `submitting`** or cards stick after normal send.
 **Known-good clear (this plugin):**
 
 1. Track **session-scoped** `{ session, refKey }` — switching chats must not look
-   like “chips just left” (that would kill the new session’s in-flight OCR).
+   like chips were cleared (that would cancel the new session’s in-flight OCR).
 2. On `phase === 'submitting'` **or** OCR refs go non-empty → empty
    (`hadRefs && !hasRefs`): `clearErrorPending` + `retain(session, ocrRefs)` +
    `files.scheduleGc(1500)` (store-owned timer, not React effect cleanup).
 3. Do **not** `discardPending` on send — sibling files still extracting must
    finish and attach to the next draft; only abort when the user removes the card.
 4. On restore (`hasRefs` again): **immediate** `retain` (no 500ms delay) so
-   failed-restore wins the race against GC.
-5. Never `retain(empty)` on idle when refs were **never** present (attach race:
+   failed-restore rehydrates before GC.
+5. Never `retain(empty)` on idle when refs were **never** present (attach timing:
    store row before chip lands).
 
 **Verify after-send:**

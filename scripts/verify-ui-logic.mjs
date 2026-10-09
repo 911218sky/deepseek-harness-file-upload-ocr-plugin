@@ -169,7 +169,7 @@ syncRail(store, session, { phase: 'submitting', ocrRefs: new Set(), prevRail })
 assert.equal(store.get(session).length, 0)
 assert.ok((store.gcCalls ?? 0) >= 1)
 
-// Attach race: never had refs → empty does not wipe a brand-new ready row.
+// Attach timing: never had refs → empty does not clear a brand-new ready row.
 const fresh = new FileAttachmentStore()
 const prev2 = { current: { session: undefined, refKey: '' } }
 fresh.add(session, { ref: 'r3', name: 'c.pdf', size: 1, kind: 'pdf', text: 'z' })

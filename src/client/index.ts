@@ -27,7 +27,7 @@ export {
 export const inject = ['slots', 'sessions', 'conversation', 'inputTriggers']
 
 /**
- * Invisible chip label. The composer still needs a Lexical reference occurrence
+ * Hidden chip label. The composer still needs a Lexical reference occurrence
  * so codec.serialize runs on send, but the FileCard rail is the only visible UI.
  * Chips whose title is exactly this marker are hidden via CSS.
  */
@@ -94,7 +94,7 @@ export function apply(ctx: Context): void {
     const snapshot = input.state.getSnapshot()
     const occurrence = snapshot.occurrences.find(item => item.source === FILE_SOURCE && item.ref === ref)
     if (occurrence !== undefined) {
-      // Delete the Lexical chip via detect coords. setDraft would flatten every
+      // Delete the Lexical chip via detect coords. setDraft would convert every
       // other reference (remaining OCR files, @-mentions) into plain text.
       actx.bail(actx, 'slash/input-insert-text', {
         text: '',

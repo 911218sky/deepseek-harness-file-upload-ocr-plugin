@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $pluginRoot = Split-Path -Parent $PSScriptRoot
 
-# Durable runtime under Harness home — survives pnpm / dsh plugin path churn.
+# Durable runtime under Harness home — remains across pnpm / dsh plugin path changes.
 if ($env:DSH_HOME -and $env:DSH_HOME.Trim().Length -gt 0) {
   $dshHome = $env:DSH_HOME.Trim()
 } else {

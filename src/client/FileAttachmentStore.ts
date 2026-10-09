@@ -110,8 +110,8 @@ export class FileAttachmentStore {
   }
 
   /**
-   * Drop stale *error* cards only. In-flight OCR must survive send/commit so a
-   * sibling file still extracting is not silently abandoned mid-fetch.
+   * Drop stale *error* cards only. In-flight OCR must continue through send/commit
+   * so a sibling file still extracting is not cancelled mid-fetch.
    */
   clearErrorPending(sessionId: SessionId): void {
     const current = this.getPending(sessionId)
@@ -199,7 +199,7 @@ export class FileAttachmentStore {
   }
 
   /**
-   * Schedule payload GC on the store (survives React effect cleanup).
+   * Schedule payload GC on the store (persists across React effect cleanup).
    * Re-scheduling extends the window so failed-restore can rehydrate first.
    */
   scheduleGc(delayMs = 1_500): void {

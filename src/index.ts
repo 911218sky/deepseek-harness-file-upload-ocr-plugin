@@ -40,7 +40,7 @@ export function resolveDshHome(): string {
 }
 
 /**
- * Stable OCR runtime root that survives pnpm / `dsh plugin add` path churn.
+ * Stable OCR runtime root that remains across pnpm / `dsh plugin add` path changes.
  * Override with `DSH_FILE_OCR_HOME`; default `$DSH_HOME/ocr-runtime`.
  */
 function resolveOcrRuntimeRoot(): string {
@@ -287,7 +287,7 @@ function runExtract(
       settled = true
       reject(new Error(CANCELLED_MESSAGE))
     }
-    // Register before execFile so abort between check and spawn cannot leak a child.
+    // Register before execFile so abort between check and spawn cannot leave an orphaned child.
     signal?.addEventListener('abort', onAbort, { once: true })
     if (signal?.aborted) {
       onAbort()

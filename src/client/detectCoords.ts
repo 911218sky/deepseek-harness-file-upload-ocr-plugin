@@ -45,7 +45,7 @@ export function detectAppendSpan(snapshot: DraftSnapshot): {
 /**
  * Detect span that deletes one chip (and its trailing separator space when
  * present). Prefer this over `setDraft(...)` — setDraft rebuilds plain text
- * only and destroys every remaining reference chip.
+ * only and removes every remaining reference chip.
  */
 export function detectChipRemoveSpan(
   snapshot: DraftSnapshot,

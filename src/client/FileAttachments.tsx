@@ -147,19 +147,19 @@ function ChoiceList({ onChoose }: { onChoose: (mode: ImageHandleMode) => void })
   )
 }
 
-/** Add common local files through the generic extraction endpoint. */
 /** True when the drag payload clearly includes a non-image file we should OCR. */
 function dragClaimsOcr(dataTransfer: DataTransfer): boolean {
   const items = [...dataTransfer.items]
   if (items.length === 0) return false
   return items.some((item) => {
     if (item.kind !== 'file') return false
-    // Empty type during drag → treat as document (PDF etc.) so we claim OCR.
+    // Empty type during drag → treat as document (PDF etc.) so we route to OCR.
     if (item.type === '') return true
     return !item.type.startsWith('image/')
   })
 }
 
+/** Add common local files through the generic extraction endpoint. */
 export function FileAttachButton({
   attach,
   attachImage,
@@ -481,7 +481,7 @@ export function FileAttachmentRail({
   const session = useOcrSessionId(ocrSessionId, files)
   const { ready, pending } = useSessionStoreSlice(files, session)
   // One snapshot subscribe (same pattern as InputBar). Selecting `occurrences`
-  // alone with `?? []` reallocates and abdicates the slot under DSH 0.1.7.
+  // alone with `?? []` reallocates and releases the slot under DSH 0.1.7.
   const input = useInput(state => state)
   const phase = input?.phase
   const occurrences = input?.occurrences ?? EMPTY_OCCURRENCES
@@ -490,7 +490,7 @@ export function FileAttachmentRail({
     [occurrences],
   )
   const refKey = [...ocrRefs].join('\u0000')
-  // Session-scoped so switching chats does not look like "chips just left".
+  // Session-scoped so switching chats does not look like chips were cleared.
   const prevRail = useRef<{ session: SessionId | undefined; refKey: string }>({
     session: undefined,
     refKey: '',
@@ -519,22 +519,22 @@ export function FileAttachmentRail({
     }
 
     // Claimed/slash submits use `submitting`. Ordinary chat uses beginDetached and
-    // stays `plain` — chips leave via commit-draft, so watch refs emptying instead.
+    // stays `plain` — chips clear via commit-draft, so watch refs emptying instead.
     if (phase === 'submitting') {
       clearReadyCards()
       return
     }
 
-    // Chips left the draft (send commit or user removed) → drop ready cards.
+    // Chips cleared from the draft (send commit or user removed) → drop ready cards.
     // Keep byRef until serialize / failed-restore settle; GC on the store timer.
     if (hadRefs && !hasRefs) {
       clearReadyCards()
       return
     }
 
-    // Idle empty: do not retain(empty) — protects attach race (store row before chip lands).
+    // Idle empty: do not retain(empty) — avoids clearing a new ready row before its chip lands.
     if (!hasRefs) return
-    // Immediate retain so failed-restore wins the race against scheduleGc(1.5s).
+    // Immediate retain so failed-restore rehydrates before scheduleGc(1.5s).
     files.retain(session, ocrRefs)
   }, [files, ocrRefs, phase, refKey, session])
 

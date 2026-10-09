@@ -2,7 +2,7 @@
 set -eu
 plugin_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
-# Durable runtime under Harness home — survives pnpm / dsh plugin path churn.
+# Durable runtime under Harness home — remains across pnpm / dsh plugin path changes.
 # Override with DSH_FILE_OCR_HOME.
 # Home: $DSH_HOME → home that already has ocr-runtime → existing ~/.dsh|~/.config/dsh → ~/.dsh
 if [ -n "${DSH_HOME:-}" ]; then

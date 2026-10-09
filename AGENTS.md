@@ -35,7 +35,7 @@ The host plugin resolves Python in this order:
 3. **`$DSH_HOME/ocr-runtime/.venv/...`** (durable; home resolved as above)
 4. Package-local `../.venv` (legacy fallback for older local setups)
 
-`.venv/` inside the npm/GitHub package is still **never** shipped. That used to break after every `pnpm add` / `dsh plugin add` because the package path changed. The durable home runtime **survives plugin and DSH upgrades**.
+`.venv/` inside the npm/GitHub package is still **never** shipped. That used to break after every `pnpm add` / `dsh plugin add` because the package path changed. The durable home runtime **remains across plugin and DSH upgrades**.
 
 If the UI or `/api/file-extract` returns:
 

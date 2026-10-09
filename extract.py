@@ -15,7 +15,7 @@ from PIL import Image, ImageFile, UnidentifiedImageError
 from pptx import Presentation
 from rapidocr_onnxruntime import RapidOCR
 
-# Mobile screenshots / progressive JPEGs / slightly truncated uploads often trip
+# Mobile screenshots / progressive JPEGs / slightly truncated uploads often fail
 # Pillow's strict decoder ("image file is truncated (N bytes not processed)").
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
