@@ -45,7 +45,7 @@
   ],
   "scripts": {
     "build": "tsdown",
-    "test": "npm run build && node scripts/verify-ui-logic.mjs"
+    "test": "npm run build && node scripts/verify-ui-logic.mjs && node scripts/verify-host-logic.mjs"
   },
   "dsh": {
     "bundle": {

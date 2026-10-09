@@ -166,26 +166,75 @@ function killChild(child: ChildProcess): void {
   }, 2_000).unref?.()
 }
 
+const CANCELLED_MESSAGE = '已取消辨識 / Extraction cancelled'
+
+type ExtractWaiter = {
+  resolve: () => void
+  reject: (error: Error) => void
+  signal?: AbortSignal
+  onAbort?: () => void
+}
+
 /** Serialize OCR so RapidOCR does not OOM under parallel uploads. */
-class ExtractQueue {
+export class ExtractQueue {
   private active = 0
-  private readonly waiters: Array<() => void> = []
+  private readonly waiters: ExtractWaiter[] = []
 
   constructor(private readonly maxInFlight: number) {}
 
-  async run<T>(task: () => Promise<T>): Promise<T> {
+  /** Exposed for tests — in-flight task count. */
+  get inFlight(): number {
+    return this.active
+  }
+
+  /** Exposed for tests — waiters blocked on a free slot. */
+  get waiting(): number {
+    return this.waiters.length
+  }
+
+  async run<T>(task: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (signal?.aborted) throw new Error(CANCELLED_MESSAGE)
+
     if (this.active >= this.maxInFlight) {
-      await new Promise<void>((resolve) => { this.waiters.push(resolve) })
+      await new Promise<void>((resolve, reject) => {
+        const waiter: ExtractWaiter = { resolve, reject, signal }
+        waiter.onAbort = () => {
+          const index = this.waiters.indexOf(waiter)
+          if (index >= 0) this.waiters.splice(index, 1)
+          reject(new Error(CANCELLED_MESSAGE))
+        }
+        this.waiters.push(waiter)
+        signal?.addEventListener('abort', waiter.onAbort, { once: true })
+      })
     }
+
+    if (signal?.aborted) throw new Error(CANCELLED_MESSAGE)
+
     this.active += 1
     try {
       return await task()
     } finally {
       this.active -= 1
       const next = this.waiters.shift()
-      next?.()
+      if (next !== undefined) {
+        if (next.onAbort !== undefined && next.signal !== undefined) {
+          next.signal.removeEventListener('abort', next.onAbort)
+        }
+        next.resolve()
+      }
     }
   }
+}
+
+/** Drop unread request bytes so keep-alive sockets are not left half-open. */
+export function drainRequest(req: IncomingMessage): void {
+  if (req.readableEnded || req.destroyed) return
+  req.resume()
+}
+
+/** Abort an oversized / unwanted body immediately. */
+export function destroyRequest(req: IncomingMessage): void {
+  if (!req.destroyed) req.destroy()
 }
 
 function parseExtractStdout(stdout: string): ExtractResult {
@@ -230,12 +279,21 @@ function runExtract(
     '--max-output-chars', String(config.maxOutputChars),
   ]
   return queue.run(() => new Promise((resolve, reject) => {
+    let settled = false
+    let child: ChildProcess | undefined
+    const onAbort = (): void => {
+      if (child !== undefined) killChild(child)
+      if (settled) return
+      settled = true
+      reject(new Error(CANCELLED_MESSAGE))
+    }
+    // Register before execFile so abort between check and spawn cannot leak a child.
+    signal?.addEventListener('abort', onAbort, { once: true })
     if (signal?.aborted) {
-      reject(new Error('已取消辨識 / Extraction cancelled'))
+      onAbort()
       return
     }
-    let settled = false
-    const child = execFile(resolvePython(config.pythonCommand), args, {
+    child = execFile(resolvePython(config.pythonCommand), args, {
       encoding: 'utf8',
       env: cleanEnvironment(),
       maxBuffer: Math.max(64 * 1024, config.maxOutputChars * 8),
@@ -261,15 +319,8 @@ function runExtract(
         reject(parseError instanceof Error ? parseError : new Error(String(parseError)))
       }
     })
-    const onAbort = (): void => {
-      killChild(child)
-      if (settled) return
-      settled = true
-      reject(new Error('已取消辨識 / Extraction cancelled'))
-    }
-    signal?.addEventListener('abort', onAbort, { once: true })
     child.stdin?.end(data)
-  }))
+  }), signal)
 }
 
 async function readFile(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
@@ -278,7 +329,10 @@ async function readFile(req: IncomingMessage, maxBytes: number): Promise<Buffer>
   for await (const chunk of req) {
     const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
     bytes += value.byteLength
-    if (bytes > maxBytes) throw new Error(`文件超过配置的 ${maxBytes} 字节上限 / File exceeds the configured ${maxBytes}-byte limit.`)
+    if (bytes > maxBytes) {
+      destroyRequest(req)
+      throw new Error(`文件超过配置的 ${maxBytes} 字节上限 / File exceeds the configured ${maxBytes}-byte limit.`)
+    }
     chunks.push(value)
   }
   if (bytes === 0) throw new Error('文件为空 / File upload is empty.')
@@ -286,13 +340,29 @@ async function readFile(req: IncomingMessage, maxBytes: number): Promise<Buffer>
 }
 
 function json(res: ServerResponse, status: number, value: unknown): void {
+  if (res.writableEnded || res.destroyed || res.headersSent) return
   const body = JSON.stringify(value)
-  res.writeHead(status, {
-    'content-type': 'application/json; charset=utf-8',
-    'content-length': Buffer.byteLength(body),
-    'cache-control': 'no-store',
-  })
-  res.end(body)
+  try {
+    res.writeHead(status, {
+      'content-type': 'application/json; charset=utf-8',
+      'content-length': Buffer.byteLength(body),
+      'cache-control': 'no-store',
+    })
+    res.end(body)
+  } catch {
+    /* client already gone */
+  }
+}
+
+function respondFailure(
+  req: IncomingMessage,
+  res: ServerResponse,
+  status: number,
+  value: unknown,
+): void {
+  if (status === 413) destroyRequest(req)
+  else drainRequest(req)
+  json(res, status, value)
 }
 
 function requestAbortSignal(req: IncomingMessage, res: ServerResponse): AbortSignal {
@@ -353,9 +423,8 @@ export function apply(ctx: Context, config: Config): void {
         json(res, 405, { error: '仅支持 GET / Only GET is supported.' })
         return
       }
-      const state = readyState.python === null && readyState.error?.includes('not finished')
-        ? await refreshReady()
-        : readyState
+      // Re-probe whenever not ready so setup-ocr after a failed boot unlocks health.
+      const state = readyState.ready ? readyState : await refreshReady()
       json(res, state.ready ? 200 : 503, state)
     },
   }), 'file-input: extraction health')
@@ -366,14 +435,14 @@ export function apply(ctx: Context, config: Config): void {
     async handler(req, res) {
       try {
         if (req.method !== 'POST') {
-          json(res, 405, { error: '仅支持 POST / Only POST is supported.' })
+          respondFailure(req, res, 405, { error: '仅支持 POST / Only POST is supported.' })
           return
         }
         const origin = req.headers.origin
         const host = req.headers.host
         if (origin !== undefined && host !== undefined
           && origin !== `http://${host}` && origin !== `https://${host}`) {
-          json(res, 403, { error: '不允许跨域文件上传 / Cross-origin file upload is not allowed.' })
+          respondFailure(req, res, 403, { error: '不允许跨域文件上传 / Cross-origin file upload is not allowed.' })
           return
         }
         if (!readyState.ready) {
@@ -392,7 +461,7 @@ export function apply(ctx: Context, config: Config): void {
         json(res, 200, result)
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error))
-        json(res, statusForError(err), { error: err.message })
+        respondFailure(req, res, statusForError(err), { error: err.message })
       }
     },
   }), 'file-input: extraction route')

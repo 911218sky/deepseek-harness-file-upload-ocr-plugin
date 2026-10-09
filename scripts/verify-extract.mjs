@@ -80,6 +80,12 @@ assert.throws(
   /Unsupported file type|Legacy Office format|不支持旧版 Office|不支持的文件类型/,
 )
 
+// binary disguised as .txt — reject (null bytes / control ratio), no latin-1 mojibake
+assert.throws(
+  () => runExtract('blob.txt', Buffer.from([0x00, 0x01, 0xff, 0xfe, 0x00, 0x10, 0x20, 0x00])),
+  /binary|二进制/,
+)
+
 // minimal pdf via pypdfium2 if available
 try {
   const { PDFDocument, StandardFonts } = await import('pdf-lib')

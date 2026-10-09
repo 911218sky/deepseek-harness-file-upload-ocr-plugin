@@ -268,17 +268,36 @@ export function FileAttachButton({
 
   const upload = (selected: File[]): void => {
     if (selected.length === 0 || busyRef.current) return
+    const start = (files: File[]): void => {
+      setError(null)
+      const needsChoice = attachImage !== undefined && files.some(file => file.type.startsWith('image/'))
+      if (needsChoice) {
+        setPendingFiles(files)
+        return
+      }
+      void processFiles(files, null)
+    }
+    // Re-probe when previously not ready so a later setup-ocr unlocks uploads.
     if (ocrReady === false) {
-      setError(OCR_SETUP_HINT)
+      void (async () => {
+        try {
+          const response = await fetch(HEALTH_ENDPOINT, { method: 'GET', cache: 'no-store' })
+          const value = await response.json() as HealthResponse
+          const ready = value.ready === true
+          setOcrReady(ready)
+          if (!ready) {
+            setError(formatExtractError(value.error ?? OCR_SETUP_HINT))
+            return
+          }
+        } catch {
+          // Health unreachable — allow POST to surface the real error.
+          setOcrReady(true)
+        }
+        start(selected)
+      })()
       return
     }
-    setError(null)
-    const needsChoice = attachImage !== undefined && selected.some(file => file.type.startsWith('image/'))
-    if (needsChoice) {
-      setPendingFiles(selected)
-      return
-    }
-    void processFiles(selected, null)
+    start(selected)
   }
 
   const chooseImageMode = (mode: ImageHandleMode): void => {

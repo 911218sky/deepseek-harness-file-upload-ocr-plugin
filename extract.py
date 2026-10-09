@@ -230,8 +230,22 @@ def powerpoint_text(data: bytes, max_slides: int, max_output_chars: int) -> str:
     return "\n\n".join(slides)
 
 
+def looks_textual(data: bytes) -> bool:
+    """Reject obvious binary payloads before permissive decoders (gb18030) can mojibake them."""
+    sample = data[:8192]
+    if not sample:
+        return True
+    if b"\x00" in sample:
+        return False
+    # C0 controls except tab / LF / CR, plus DEL.
+    weird = sum(1 for b in sample if b < 9 or (13 < b < 32) or b == 127)
+    return (weird / len(sample)) < 0.30
+
+
 def decoded_text(data: bytes) -> str:
-    for encoding in ("utf-8-sig", "gb18030", "latin-1"):
+    if not looks_textual(data):
+        raise ValueError("文本文件包含二进制内容 / Text file appears to contain binary data.")
+    for encoding in ("utf-8-sig", "gb18030"):
         try:
             return data.decode(encoding)
         except UnicodeDecodeError:
